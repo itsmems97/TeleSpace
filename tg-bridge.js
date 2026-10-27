@@ -83,22 +83,110 @@ function readBlob(blob) {
     });
 }
 
+var BIGLIMIT=10*1024*1024, PART=512*1024, BATCH=4;
+
+function big(n){
+    if(L.bigInt)return L.bigInt(String(n));
+    var id=chat.id;
+    if(typeof id==="bigint")return BigInt(n);
+    return id.minus(id).plus(Number(n)); /* uses the channel id object to build a 64-bit integer */
+}
+function waitOnline(o){
+    return new Promise(function(res,rej){
+        (function chk(){
+            var s=o.stop&&o.stop(); if(s)return rej({stop:s});
+            if(navigator.onLine)return res();
+            setTimeout(chk,700);
+        })();
+    });
+}
+function reconnect(){
+    var up=true; try{up=client._sender.isConnected()}catch(e){}
+    return up?Promise.resolve():client.connect().catch(function(){});
+}
+function errMsg(e){return String((e&&(e.errorMessage||e.message))||e||"")}
+function msgIdFrom(r){
+    var ups=(r&&r.updates)||[r],i,u,fb=null;
+    for(i=0;i<ups.length;i++){
+        u=ups[i]; if(!u)continue;
+        if(u.message&&u.message.id)return u.message.id;
+        if(u.className==="UpdateShortSentMessage"&&u.id)return u.id;
+        if(u.className==="UpdateMessageID")fb=u.id;
+    }
+    if(fb)return fb;
+    throw new Error("Upload finished but message id was not returned");
+}
+
+function bigUpload(blob,name,caption,cb,o){
+    var total=Math.ceil(blob.size/PART), st=o.state;
+    if(!st||!st.fileId||st.total!==total||st.next==null||st.next>total)st={fileId:String(Math.floor(Math.random()*9e15)+1),total:total,next:0};
+    var id=big(st.fileId), rnd=String(Math.floor(Math.random()*9e15)+1), fails=0, A=L.Api;
+
+    function recover(e){
+        if(e&&e.stop)return Promise.reject(e);
+        var m=errMsg(e);
+        if(/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED|FILE_PART_\d*_?MISSING|FILE_PARTS_INVALID|FILE_ID_INVALID/.test(m))return Promise.reject(e);
+        if(e&&e.seconds&&e.seconds<120){return new Promise(function(r){setTimeout(r,e.seconds*1000+500)});}
+        if(navigator.onLine&&++fails>6)return Promise.reject(e);
+        return waitOnline(o).then(function(){return new Promise(function(r){setTimeout(r,navigator.onLine&&fails?1500*fails:800)})}).then(reconnect);
+    }
+    function sendPart(i){
+        return blob.slice(i*PART,Math.min(blob.size,(i+1)*PART)).arrayBuffer().then(function(ab){
+            return client.invoke(new A.upload.SaveBigFilePart({fileId:id,filePart:i,fileTotalParts:total,bytes:L.Buffer.from(ab)}));
+        }).then(function(ok){if(!ok)throw new Error("Part rejected")});
+    }
+    function step(){
+        var s=o.stop&&o.stop(); if(s)return Promise.reject({stop:s});
+        if(st.next>=total)return Promise.resolve();
+        var from=st.next,to=Math.min(total,from+BATCH),ps=[],i;
+        for(i=from;i<to;i++)ps.push(sendPart(i));
+        return Promise.all(ps).then(function(){
+            fails=0; st.next=to; cb(to/total); if(o.checkpoint)o.checkpoint(st);
+            return step();
+        },function(e){return recover(e).then(step)});
+    }
+    function finish(){
+        var s=o.stop&&o.stop(); if(s)return Promise.reject({stop:s});
+        return client.invoke(new A.messages.SendMedia({
+            peer:chat, message:caption, silent:true, randomId:big(rnd),
+            media:new A.InputMediaUploadedDocument({
+                file:new A.InputFileBig({id:id,parts:total,name:name}),
+                mimeType:o.mime||"application/octet-stream",
+                attributes:[new A.DocumentAttributeFilename({fileName:name})], forceFile:true})
+        })).then(msgIdFrom,function(e){return recover(e).then(finish)});
+    }
+    return step().then(finish).catch(function(e){
+        /* Telegram dropped the saved parts (they expire): start this file again from part 0 once */
+        if(!o.retried&&/FILE_PART_\d*_?MISSING|FILE_PARTS_INVALID|FILE_ID_INVALID/.test(errMsg(e))){
+            o.retried=true; o.state=null; if(o.checkpoint)o.checkpoint({fileId:"",total:total,next:0});
+            return bigUpload(blob,name,caption,cb,o);
+        }
+        throw e;
+    });
+}
+
 window.TGDriver={
     phone:function(n){ return boot().then(c=>c.sendCode({apiId:C.apiId,apiHash:C.apiHash},n)).then(r=>{ phone=n; hash=r.phoneCodeHash; return {next:"code"}; }); },
     code:function(v){ return client.invoke(new L.Api.auth.SignIn({phoneNumber:phone,phoneCodeHash:hash,phoneCode:String(v).replace(/\D/g,"")})).then(ready,function(e){ if(e&&e.errorMessage==="SESSION_PASSWORD_NEEDED")return {next:"pass"}; throw e; }); },
     password:function(v){ return client.signInWithPassword({apiId:C.apiId,apiHash:C.apiHash},{ password:()=>Promise.resolve(v), onError:e=>{throw e} }).then(ready); },
     
-    upload:function(blob,name,cb){
-        return findOrMake().then(()=>readBlob(blob)).then(function(buf){
-            if (!buf || buf.length === 0) throw new Error("File buffer is empty");
-            var fileInfo = {name: name, size: blob.size, lastModified: Date.now()};
-            return client.sendFile(chat,{
-                file:new L.CustomFile(name,blob.size,"",buf), forceDocument:true,
-                caption:name+"\n#fp:"+fp(fileInfo), progressCallback:function(p){cb(p)}
-            });
-        }).then(m=>m.id);
+    /* Files up to 10 MB: normal upload. Bigger files (up to 1.9 GB): sent in 512 KB parts, so an
+       interrupted upload continues from the last saved part instead of starting over.
+       o = {fp, folder, mime, state:{fileId,total,next}, stop():'pause'|'cancel'|null, checkpoint(state)} */
+    upload:function(blob,name,cb,o){
+        o=o||{};
+        var caption=name+"\n#fp:"+(o.fp||"")+(o.folder?"\n#fd:"+o.folder:"");
+        return boot().then(findOrMake).then(function(){
+            if(blob.size<=BIGLIMIT){
+                return readBlob(blob).then(function(buf){
+                    if(!buf||buf.length===0)throw new Error("File buffer is empty");
+                    return client.sendFile(chat,{file:new L.CustomFile(name,blob.size,"",buf),forceDocument:true,caption:caption,progressCallback:function(p){cb(p)}});
+                }).then(function(m){return m.id});
+            }
+            return bigUpload(blob,name,caption,cb,o);
+        });
     },
-    
+
     deleteMessages:function(ids){
         return boot().then(findOrMake).then(()=>client.deleteMessages(chat, ids, {revoke: true}));
     },
@@ -132,16 +220,18 @@ window.TGDriver={
     },
     history:function(){
         return boot().then(findOrMake).then(()=>client.getMessages(chat,{limit:3000})).then(function(ms){
-            var out=[],i,t;
+            var out=[],i,t,raw,p;
             for(i=0;i<ms.length;i++){
                 t=(ms[i].message||"").split("#fp:");
                 if(t.length>1){
+                    raw=t[1].split("\n#fd:");
                     out.push({
-                        fp:t[1].replace(/\s+$/,""), name:ms[i].file&&ms[i].file.name||"file",
+                        fp:raw[0].replace(/\s+$/,""), folder:raw[1]?raw[1].replace(/\s+$/,""):"", name:ms[i].file&&ms[i].file.name||"file",
                         size:ms[i].file&&ms[i].file.size||0, mtime:(ms[i].date||0)*1000, msgId: ms[i].id
                     });
                 }
             }
+            out.truncated=ms.length>=3000; /* if true, older messages were not read */
             return out;
         });
     }

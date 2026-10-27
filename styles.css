@@ -145,3 +145,27 @@ button:active{transform:scale(.95)}
 #vContent img,#vContent video{max-width:100%;max-height:80vh;object-fit:contain;border-radius:8px}
 
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---- v2: folders, passwords, transfers, greeting ---- */
+.icon-trash{background:linear-gradient(135deg,#ff6a6a,#c62828)}
+.wish{font-size:13px;color:var(--tx2)}
+.quote{font-size:12px;line-height:17px;color:var(--tx2);font-style:italic;margin:0 0 14px;position:relative;z-index:1}
+.storage-text p#grW{font-size:13px;color:var(--tx2);margin-top:2px}
+.app-grid+.sec{margin-top:4px}
+.app-item h3{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.app-item p{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.warnbar{background:rgba(255,69,58,.14);color:var(--bad);border-radius:12px;padding:10px 14px;font-size:13px;line-height:18px;margin:0 0 12px}
+.file-item .ib{width:36px;height:36px}
+.pw{position:relative}
+.pw input{padding-right:52px}
+.eye{position:absolute;right:4px;top:0;width:44px;height:48px;display:flex;align-items:center;justify-content:center;color:var(--tx2);border-radius:14px}
+.eye:active{color:var(--tx)}
+.sw{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:16px 4px 6px;cursor:pointer}
+.swk{width:50px;height:30px;border-radius:15px;background:var(--sf2);position:relative;transition:background .25s;flex:none;display:block}
+.swk::after{content:'';position:absolute;left:3px;top:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .25s}
+.swk.on{background:var(--ok)}
+.swk.on::after{left:23px}
+.keybox{font-family:ui-monospace,Menlo,monospace;font-size:17px;letter-spacing:1px;text-align:center;background:var(--sf2);border-radius:14px;padding:14px 10px;margin:12px 0;word-break:break-all;user-select:all}
+.vpw{font-family:ui-monospace,Menlo,monospace;font-size:15px;color:var(--tx);margin-top:2px;overflow-wrap:anywhere}
+.sh .r{gap:4px}
+.sh .btn:disabled{opacity:.6}

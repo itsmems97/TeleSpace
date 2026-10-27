@@ -50,7 +50,7 @@ function FLD(id){return S.folders.find(function(f){return f.id===id})}
 function hid(it){var f=it.folder&&FLD(it.folder);return !!(f&&f.locked&&!S.unlocked.has(f.id))} /* items of locked folders stay hidden everywhere else */
 
 /* ---- storage (IndexedDB v3) ---- */
-function openDb(cb){try{var r=indexedDB.open('telegrive-web',3);r.onupgradeneeded=function(e){var db=e.target.result;
+function openDb(cb){try{var r=indexedDB.open('iSpace-web',3);r.onupgradeneeded=function(e){var db=e.target.result;
  if(!db.objectStoreNames.contains('f'))db.createObjectStore('f',{keyPath:'fp'});
  if(!db.objectStoreNames.contains('sync'))db.createObjectStore('sync',{keyPath:'name'});
  [['folders','id'],['tomb','fp'],['meta','k'],['vault','id'],['prog','fp']].forEach(function(s){if(!db.objectStoreNames.contains(s[0]))db.createObjectStore(s[0],{keyPath:s[1]})})};
@@ -594,10 +594,10 @@ function logoutAction(type){
       toast('Deleting channel and data...');
       if(window.TGDriver && window.TGDriver.deleteChannel) {
           window.TGDriver.deleteChannel().finally(() => {
-              localStorage.clear(); indexedDB.deleteDatabase('telegrive-web'); location.reload();
+              localStorage.clear(); indexedDB.deleteDatabase('iSpace-web'); location.reload();
           });
       } else {
-          localStorage.clear(); indexedDB.deleteDatabase('telegrive-web'); location.reload();
+          localStorage.clear(); indexedDB.deleteDatabase('iSpace-web'); location.reload();
       }
    }
 }

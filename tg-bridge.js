@@ -33,7 +33,7 @@ function boot(){
     } catch(e) {}
 
     client=new L.TelegramClient(new L.StringSession(ls("tgsess")),C.apiId,C.apiHash,{
-        connectionRetries:5, useWSS:true, deviceModel:"Telegrive Web", systemVersion:"Web", appVersion:"1.0", langCode:"en", systemLangCode:"en", proxy: proxyConfig
+        connectionRetries:5, useWSS:true, deviceModel:"iSpace Web", systemVersion:"Web", appVersion:"1.0", langCode:"en", systemLangCode:"en", proxy: proxyConfig
     });
     return client.connect().then(function(){return client})
 }

@@ -45,6 +45,16 @@ function fp(f){
     return f.name+"|"+f.size+"|"+f.lastModified;
 }
 
+// Helper to convert Blob to Buffer safely without failing
+function readBlob(blob) {
+    return new Promise(function(resolve, reject) {
+        var reader = new FileReader();
+        reader.onload = function() { resolve(L.Buffer.from(reader.result)); };
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(blob);
+    });
+}
+
 window.TGDriver={
     phone:function(n){
         return boot().then(function(c){
@@ -68,15 +78,21 @@ window.TGDriver={
         }).then(ready);
     },
     upload:function(blob,name,cb){
-        return findOrMake().then(function(){return blob.arrayBuffer()}).then(function(buf){
+        return findOrMake().then(function(){ return readBlob(blob); }).then(function(buf){
+            if (!buf || buf.length === 0) throw new Error("File buffer is empty");
             var fileInfo = {name: name, size: blob.size, lastModified: Date.now()};
             return client.sendFile(chat,{
-                file:new L.CustomFile(name,blob.size,"",L.Buffer.from(buf)),
+                file:new L.CustomFile(name,blob.size,"",buf),
                 forceDocument:true,
                 caption:name+"\n#fp:"+fp(fileInfo),
                 progressCallback:function(p){cb(p)}
             });
         }).then(function(m){return m.id});
+    },
+    deleteMessages:function(ids){
+        return boot().then(findOrMake).then(function(){
+            return client.deleteMessages(chat, ids, {revoke: true});
+        });
     },
     getMedia:function(msgId){
         return boot().then(findOrMake).then(function(){

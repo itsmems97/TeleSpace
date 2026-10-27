@@ -1,6 +1,6 @@
 (function(){
 var $=function(s){return document.querySelector(s)};
-var S={mode:'',tab:'home',q:'',f:'all',items:[],cfg:{token:'',chat:''},db:null,active:0,sheet:false,_lastCount:-1,_lastState:-1,profilePic:'',selectMode:false,selected:new Set(),syncFolders:[]};
+var S={mode:'',tab:'home',q:'',f:'all',items:[],cfg:{token:'',chat:''},db:null,active:0,sheet:false,_lastCount:-1,_lastState:-1,profilePic:'',profileName:'',selectMode:false,selected:new Set(),syncFolders:[]};
 var KINDS=[['image','Images','photo','photos'],['video','Videos','video','videos'],['app','Apps','app','apps'],['zip','Archives','file','files'],['audio','Audio','track','tracks'],['doc','Documents','file','files'],['other','Other','file','files']];
 var ICON={image:'photos',video:'video',audio:'audio',doc:'doc',zip:'zip',app:'apk',other:'doc'};
 try{var c=JSON.parse(localStorage.getItem('tgcfg')||'{}');S.cfg.token=c.token||'';S.cfg.chat=c.chat||''}catch(e){}
@@ -9,7 +9,9 @@ var GL=70;try{GL=+(localStorage.getItem('tggl')||70)}catch(e){}
 function glass(v){GL=v;var r=document.documentElement.style;r.setProperty('--ga',(.4+v/100*.48).toFixed(2));r.setProperty('--gb',(14+v/100*24)+'px');try{localStorage.setItem('tggl',v)}catch(e){}}glass(GL);
 
 function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
-function ic(n,st){return '<svg class="i"'+(st?' style="'+st+'"':'')+'><use href="#'+n+'"/></svg>'}
+var FA={home:'house',folder:'folder',photos:'images',plus:'plus',swap:'right-left',search:'magnifying-glass',cloud:'cloud',video:'video',doc:'file-lines',audio:'music',zip:'file-zipper',app:'mobile-screen-button',apk:'mobile-screen-button',chev:'chevron-right',warn:'triangle-exclamation'};
+function ic(n,st){return '<i class="fa-solid fa-'+(FA[n]||'circle')+'"'+(st?' style="'+st+'"':'')+'></i>'}
+function greet(){var h=new Date().getHours();return h<12?'Good morning':h<18?'Good afternoon':'Good evening'}
 function fmt(n){if(isNaN(n)||n==null)return '0 B';if(n<1024)return n+' B';var u=['KB','MB','GB','TB'],i=-1;do{n/=1024;i++}while(n>=1024&&i<3);return (n>=100||i==0?Math.round(n):n.toFixed(1))+' '+u[i]}
 function dt(t,o){try{return new Date(t).toLocaleDateString(undefined,o||{month:'short',day:'numeric',year:'numeric'})}catch(e){return ''}}
 function kind(it){var t=it.type||'',e=(it.name.split('.').pop()||'').toLowerCase();
@@ -118,13 +120,13 @@ function makeThumb(el, it, u) {
 }
 
 /* views */
-function slot(it){var k=kind(it);return '<div class="slot">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':ic(ICON[k],'color:var(--k-'+k+')'))+'</div>'}
 function row(it){
  let id = it.fp.replace(/[^a-zA-Z0-9]/g,'');
+ let k = kind(it);
  let st = '';
- if(it.state=='done') st = '<span class="ok">'+ic('cloud')+'</span>';
+ if(it.state=='done') st = '<i class="fa-solid fa-circle-check ok"></i>';
  else if(it.state=='up') st = '<span class="mt" id="pt_'+id+'">'+Math.round((it.p||0)*100)+'%</span>';
- else if(it.state=='fail') st = '<span class="bd">'+ic('warn')+'</span>';
+ else if(it.state=='fail') st = '<i class="fa-solid fa-triangle-exclamation bd"></i>';
  else if(it.state=='deleted') st = '<span class="bd" style="font-size:12px">Deleted</span>';
  else st = '<span class="mt">Waiting</span>';
 
@@ -133,61 +135,83 @@ function row(it){
 
  let action = S.selectMode ? 'select_file' : 'view';
  let isSel = S.selected.has(it.fp);
- let chk = S.selectMode ? '<div class="chk-icon" style="margin-right:12px;color:var(--ac);font-size:22px">'+(isSel?'☑':'☐')+'</div>' : '';
- let del = (!S.selectMode && it.state!='deleted') ? '<button class="ib" style="color:var(--bad);margin-left:8px" data-a="del" data-fp="'+it.fp+'"><svg class="i" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' : '';
+ let chk = S.selectMode ? '<div class="chk-icon">'+(isSel?'<i class="fa-solid fa-circle-check" style="color:var(--ac)"></i>':'<i class="fa-regular fa-circle" style="color:var(--tx3)"></i>')+'</div>' : '';
+ let del = (!S.selectMode && it.state!='deleted') ? '<button class="ib" style="color:var(--bad)" data-a="del" data-fp="'+it.fp+'"><i class="fa-solid fa-trash-can"></i></button>' : '';
+ let icon = it.thumb ? '<img alt="" src="'+it.thumb+'">' : ic(ICON[k]);
 
- return '<div class="r '+(isSel?'selected-item':'')+'" data-a="'+action+'" data-fp="'+it.fp+'">'+chk+slot(it)+'<div class="m"><div class="t">'+esc(it.name)+'</div><div class="mt">'+err+'</div>'+bar+'</div>'+st+del+'</div>'
+ return '<div class="file-item '+(isSel?'selected-item':'')+'" data-a="'+action+'" data-fp="'+it.fp+'">'+chk+'<div class="fi-icon icon-kind-'+k+'">'+icon+'</div><div class="file-details"><div class="file-name">'+esc(it.name)+'</div><div class="file-meta">'+err+'</div>'+bar+'</div>'+st+del+'</div>'
 }
 
 function counts(){var c={up:0,q:0,f:0,d:0,del:0,p:0,n:0},i,it;for(i=0;i<S.items.length;i++){it=S.items[i];if(it.state=='up'){c.up++;c.p+=it.p||0}else if(it.state=='queued')c.q++;else if(it.state=='fail')c.f++;else if(it.state=='deleted')c.del++;else c.d++;}c.n=c.up+c.q;return c}
 
-function head(t, extra){
-  return '<div class="top"><h1>'+t+'</h1>'+ (extra||'') +'<button class="ib" data-a="settings">'+ic('cloud')+'</button></div>';
+function connectCard(){
+ return '<div class="storage-card"><div class="storage-header"><div class="cloud-icon-small">'+ic('cloud')+'</div><div class="storage-text"><h2>Connect your Telegram</h2><p>Sign in to start backing up files.</p></div></div><button class="btn" data-a="settings" style="width:100%">Set up</button></div>';
 }
-function status(){var c=counts();
- if(!ready())return '<div class="card"><div class="r"><div class="m"><div class="t">Connect your Telegram channel</div><div class="s">Add a bot token and channel to start backing up.</div></div><button class="lnk" data-a="settings">Set up</button></div></div>';
- var h='';
- if(c.n){var tot=c.n+c.d,pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);h+='<div class="r" data-a="transfers"><div class="m"><div class="t">'+c.n+' transfer'+(c.n>1?'s':'')+' in progress</div><div class="s">'+pct+'% done</div><div class="bar"><i style="width:'+pct+'%"></i></div></div></div>'}
- if(c.f){h+='<div class="r"><div class="m"><div class="t">'+c.f+' transfer'+(c.f>1?'s':'')+' failed</div><div class="s">Open Transfers to see why.</div></div><button class="lnk" data-a="retry">Retry</button></div>'}
- if(!h)h='<div class="r"><span class="ok" style="margin-right:12px">'+ic('cloud')+'</span><div class="m"><div class="t">Backup is up to date</div><div class="s">'+c.d+' item'+(c.d==1?'':'s')+' in your channel</div></div></div>';
- return '<div class="card">'+h+'</div>'}
 
-function home(){var by={},tot=0,n=0,i,it,k;
+function home(){
+ if(!ready()) return '<div class="header"><h1>iSpace</h1><div class="profile-pic" data-a="profile"><i class="fa-solid fa-user"></i></div></div>'+connectCard();
+
+ var by={},tot=0,n=0,i,it,k,c=counts();
  for(i=0;i<S.items.length;i++){it=S.items[i];if(it.state!='done')continue;k=kind(it);by[k]=by[k]||{n:0,b:0};by[k].n++;by[k].b+=it.size;tot+=it.size;n++}
- var seg='',rows='';
- KINDS.forEach(function(K){var b=by[K[0]];if(!b)return;seg+='<i style="width:'+(b.b/Math.max(1,tot)*100)+'%;background:var(--k-'+K[0]+')"></i>';
-  rows+='<button class="r" data-a="kind" data-k="'+K[0]+'">'+ic(ICON[K[0]],'color:var(--k-'+K[0]+');margin-right:16px')+'<span class="m t">'+K[1]+'</span><span class="s">'+b.n+' '+(b.n==1?K[2]:K[3])+' &middot; '+fmt(b.b)+'</span>'+ic('chev','color:var(--tx3);margin-left:8px;width:20px')+'</button>'});
- 
- let avHtml = S.profilePic ? '<img src="'+S.profilePic+'" style="width:100%;height:100%;border-radius:22px;object-fit:cover">' : (ready()?'ME':'?');
+ var seg='';
+ KINDS.forEach(function(K){var b=by[K[0]];if(!b)return;seg+='<div class="progress-segment-'+K[0]+'" style="width:'+(b.b/Math.max(1,tot)*100)+'%"></div>'});
 
- return '<div class="top"><svg width="36" height="36" viewBox="0 0 36 36"><path d="M4 16L19 8l-4 13z" fill="#3085FE"/><path d="M20 6l12-3-6 13z" fill="#0EBC5F"/><path d="M17 23l9-5 4 12z" fill="#FDCD06"/></svg><b>Telegrive</b><button class="ib" data-a="transfers">'+ic('swap')+'</button><button class="av" data-a="profile" style="padding:0;overflow:hidden">'+avHtml+'</button></div>'
- +'<div class="field" data-a="search">'+ic('search')+'<span style="margin-left:12px">Search files and folders</span></div>'+status()
- +(ready()?'<div class="card"><div class="r"><div class="m"><div class="t">Back up photos</div><div class="s">Choose photos and videos.</div></div></div><div class="pad" style="padding-top:0"><button class="btn" data-a="pickM">Choose photos</button></div></div>':'')
- +'<div class="sec">Storage</div>'+(n?'<div class="card"><div class="pad"><b style="font-size:17px;font-weight:700">'+fmt(tot)+'</b> <span class="s">in '+n+' file'+(n==1?'':'s')+'</span><div class="bar" style="height:6px">'+seg+'</div></div>'+rows+'</div>':'<div class="empty">Nothing in your drive yet.</div>')}
+ let avHtml = S.profilePic ? '<img src="'+S.profilePic+'" style="width:100%;height:100%;object-fit:cover">' : '<i class="fa-solid fa-user"></i>';
+
+ let extraRows='';
+ if(c.n){var pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);
+   extraRows+='<div class="list-row" data-a="transfers"><div class="list-row-left"><div class="icon-wrapper icon-kind-other">'+ic('swap')+'</div><div class="list-row-text"><h3>'+c.n+' transfer'+(c.n>1?'s':'')+' in progress</h3><p>'+pct+'% done</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>';
+ }
+ if(c.f){
+   extraRows+='<div class="list-row" data-a="retry"><div class="list-row-left"><div class="icon-wrapper icon-kind-other" style="background:var(--bad)">'+ic('warn')+'</div><div class="list-row-text"><h3>'+c.f+' transfer'+(c.f>1?'s':'')+' failed</h3><p>Tap to retry</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>';
+ }
+
+ var rows='';
+ KINDS.forEach(function(K){var b=by[K[0]];if(!b)return;
+  rows+='<div class="list-row" data-a="kind" data-k="'+K[0]+'"><div class="list-row-left"><div class="icon-wrapper icon-kind-'+K[0]+'">'+ic(ICON[K[0]])+'</div><div class="list-row-text"><h3>'+K[1]+'</h3><p>'+b.n+' '+(b.n==1?K[2]:K[3])+' &middot; '+fmt(b.b)+'</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>'});
+
+ return '<div class="header"><h1>iSpace</h1><div class="profile-pic" data-a="profile">'+avHtml+'</div></div>'
+ +'<div class="storage-card"><div class="storage-header"><div class="cloud-icon-small">'+ic('cloud')+'</div><div class="storage-text"><h2>'+greet()+(S.profileName?',<br>'+esc(S.profileName):'')+'</h2></div></div>'
+ +'<p style="font-weight:600;font-size:14px;margin-bottom:8px">Telegram Cloud</p>'
+ +'<div class="storage-details"><span>'+fmt(tot)+' used across '+n+' item'+(n==1?'':'s')+'</span></div>'
+ +'<div class="progress-bar-bg">'+seg+'</div>'
+ +'<a href="#" class="manage-storage" data-a="tab" data-k="files">Manage Storage <i class="fa-solid fa-chevron-right"></i></a></div>'
+ +extraRows
+ +'<div class="app-grid">'
+   +'<div class="app-item" data-a="tab" data-k="files"><div class="icon-wrapper icon-drive">'+ic('folder')+'</div><h3>Drive</h3><p>'+n+' items</p></div>'
+   +'<div class="app-item" data-a="tab" data-k="photos"><div class="icon-wrapper icon-photos">'+ic('photos')+'</div><h3>Photos</h3><p>'+S.items.filter(function(x){var kk=kind(x);return (kk=='image'||kk=='video')&&x.state=='done'}).length+' items</p></div>'
+   +'<div class="app-item" data-a="transfers"><div class="icon-wrapper icon-mail">'+ic('swap')+'</div><h3>Transfers</h3><p>'+c.n+' active</p></div>'
+   +'<div class="app-item" data-a="autosync"><div class="icon-wrapper icon-notes">'+ic('folder')+'</div><h3>Auto-Sync</h3><p>'+S.syncFolders.length+' folders</p></div>'
+   +'<div class="app-item" data-a="kind" data-k="deleted"><div class="icon-wrapper icon-contacts">'+ic('warn')+'</div><h3>Deleted</h3><p>'+c.del+' items</p></div>'
+   +'<div class="app-item" data-a="settings"><div class="icon-wrapper icon-findmy">'+ic('search')+'</div><h3>Settings</h3><p>Account</p></div>'
+ +'</div>'
+ +(n?'<div class="sec">Storage</div>'+rows:'')
+}
 
 function listHtml(){var q=S.q.toLowerCase(),L=S.items.filter(function(it){
   if(S.f=='tr')return it.state!='done' && it.state!='deleted';
   if(S.f=='deleted')return it.state=='deleted';
   if(S.f!='all'&&kind(it)!=S.f)return false;return !q||it.name.toLowerCase().indexOf(q)>-1});
- return L.length?'<div class="card">'+L.map(row).join('')+'</div>':'<div class="empty">'+(S.f=='tr'?'No transfers running.':S.f=='deleted'?'No items deleted.':q?'No files match search.':'No files here yet.')+'</div>'}
+ return L.length?'<div class="file-list">'+L.map(row).join('')+'</div>':'<div class="empty">'+(S.f=='tr'?'No transfers running.':S.f=='deleted'?'No items deleted.':q?'No files match search.':'No files here yet.')+'</div>'}
 
 function files(){
   var F=[['all','All'],['image','Photos'],['video','Videos'],['doc','Documents'],['tr','Transfers'],['deleted','Deleted']];
-  let extra = S.selectMode ? '<button class="lnk" style="margin-right:12px" data-a="cancel_select">Cancel</button>' : '<button class="lnk" style="margin-right:12px" data-a="select_mode">Select</button>';
-  
+  let extra = S.selectMode ? '<button class="lnk" data-a="cancel_select">Cancel</button>' : '<button class="lnk" data-a="select_mode">Select</button>';
+
   let selBar = S.selectMode && S.selected.size ? '<div id="sel-bar">'+
       '<button class="btn" data-a="dl_selected" style="background:var(--ac)">Download ('+S.selected.size+')</button>'+
       '<button class="btn" data-a="del_selected" style="background:var(--bad)">Delete ('+S.selected.size+')</button>'+
   '</div>' : '';
 
-  return '<div class="top"><h1>Files</h1>'+extra+'</div>'
+  return '<div class="nav-header"><button class="back-btn" data-a="tab" data-k="home"><i class="fa-solid fa-chevron-left"></i> iSpace</button><h2 style="margin-right:0">Drive</h2>'+extra+'</div>'
+  +(!ready()?connectCard():'')
   +'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search files" value="'+esc(S.q)+'"></div><div class="chips">'+F.map(function(f){return '<button class="chip'+(S.f==f[0]?' on':'')+'" data-a="f" data-k="'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div><div id="list">'+listHtml()+'</div>'+selBar;
 }
 
 function photos(){
   var P=S.items.filter(function(it){var k=kind(it);return (k=='image'||k=='video') && it.state!='deleted'}),g={},o=[],h='';
   P.sort(function(a,b){return b.mtime-a.mtime}).forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
-  
+
   o.forEach(function(m){
     h+='<div class="sec">'+m+'</div><div class="grid">'+g[m].map(function(it){
       let isSel = S.selected.has(it.fp);
@@ -196,18 +220,22 @@ function photos(){
     }).join('')+'</div>'
   });
 
-  let extra = S.selectMode ? '<button class="lnk" style="margin-right:12px" data-a="cancel_select">Cancel</button>' : '<button class="lnk" style="margin-right:12px" data-a="select_mode">Select</button>';
+  let extra = S.selectMode ? '<button class="lnk" data-a="cancel_select">Cancel</button>' : '<button class="lnk" data-a="select_mode">Select</button>';
 
   let selBar = S.selectMode && S.selected.size ? '<div id="sel-bar">'+
       '<button class="btn" data-a="dl_selected" style="background:var(--ac)">Download ('+S.selected.size+')</button>'+
       '<button class="btn" data-a="del_selected" style="background:var(--bad)">Delete ('+S.selected.size+')</button>'+
   '</div>' : '';
 
-  return head('Photos', extra)+status()+(h||'<div class="empty">No photos backed up yet.</div>')+(ready()?'<div style="margin-top:16px"><button class="btn" data-a="pickM">Choose photos</button></div>':'')+selBar;
+  return '<div class="nav-header"><button class="back-btn" data-a="tab" data-k="home"><i class="fa-solid fa-chevron-left"></i> iSpace</button><h2 style="margin-right:0">Photos</h2>'+extra+'</div>'
+  +(!ready()?connectCard():'')
+  +(h||'<div class="empty">No photos backed up yet.</div>')+(ready()?'<div style="margin-top:16px"><button class="btn" data-a="pickM">Choose photos</button></div>':'')+selBar;
 }
 
 function render(){var v=S.tab=='home'?home():S.tab=='files'?files():photos();$('#app').innerHTML=v;if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
- $('#nav').innerHTML=[['home','Home','home'],['files','Files','folder'],['photos','Photos','photos']].map(function(t){return '<button data-a="tab" data-k="'+t[0]+'" class="'+(S.tab==t[0]?'on':'')+'"><span>'+ic(t[2])+'</span>'+t[1]+'</button>'}).join('');live()}
+ $('#nav').innerHTML=[['home','Home','home'],['files','Files','folder'],['photos','Photos','photos']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
+  +'<div data-a="profile" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>More</span></div>';
+ live()}
 function live(){var c=counts(),b=$('#live');if(!c.n||!ready()){b.style.display='none';return}
  var pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);b.style.display='block';$('#liveT').textContent='Uploading '+c.n+' item'+(c.n>1?'s':'')+' · '+pct+'%';$('#liveB').style.width=pct+'%'}
 
@@ -535,8 +563,21 @@ function openAuth(step,msg){S.sheet=true;var T=AU[step];
 function authGo(step){var m=$('#msg'),v=$('#au').value.replace(/^\s+|\s+$/g,'');if(!v){m.textContent='Fill in this field first.';return}
  if(!window.TGDriver){m.innerHTML='<span class="bd">Bridge not loaded.</span>';return}
  m.textContent='Please wait...';
- window.TGDriver[step](v).then(function(r){var n=r&&r.next;if(n=='ready'){S.mode='acct';try{localStorage.setItem('tgmode','acct')}catch(e){}closeSheet();toast('Signed in.');hist();run()}else openAuth(n=='pass'?'password':'code')},function(e){m.innerHTML='<span class="bd">'+esc((e&&e.message)||e||'Something went wrong.')+'</span>'})}
+ window.TGDriver[step](v).then(function(r){var n=r&&r.next;if(n=='ready'){S.mode='acct';try{localStorage.setItem('tgmode','acct')}catch(e){}closeSheet();toast('Signed in.');hist();fetchProfile();run()}else openAuth(n=='pass'?'password':'code')},function(e){m.innerHTML='<span class="bd">'+esc((e&&e.message)||e||'Something went wrong.')+'</span>'})}
 
+function fetchProfile(){
+  if(!window.TGDriver||!window.TGDriver.getMe)return;
+  window.TGDriver.getMe().then(function(u){
+    if(!u)return;
+    S.profileName=u.firstName||'';
+    if(u.photo){
+      window.TGDriver.getProfilePic(u.id,u.accessHash,u.photo).then(function(url){
+        if(url){S.profilePic=url;if(S.tab=='home')render();}
+      }).catch(function(){});
+    }
+    if(S.tab=='home')render();
+  }).catch(function(){});
+}
 function hist(){
   var D=window.TGDriver;
   if(!D||!D.history)return;
@@ -600,12 +641,12 @@ document.addEventListener('click',function(e){
         S.selected.delete(fp);
         el.classList.remove('selected-item');
         let chk = el.querySelector('.chk-icon');
-        if(chk) chk.innerHTML = '☐';
+        if(chk) chk.innerHTML = '<i class="fa-regular fa-circle" style="color:var(--tx3)"></i>';
     } else {
         S.selected.add(fp);
         el.classList.add('selected-item');
         let chk = el.querySelector('.chk-icon');
-        if(chk) chk.innerHTML = '☑';
+        if(chk) chk.innerHTML = '<i class="fa-solid fa-circle-check" style="color:var(--ac)"></i>';
     }
     // Update bottom bar count without full re-render
     let bar = document.getElementById('sel-bar');
@@ -672,7 +713,7 @@ openDb(function(){loadAll(function(){loadSyncFolders(function(){
     return true;
  });
  S.items.sort(function(a,b){return b.mtime-a.mtime});render();
- if(S.mode=='acct'){hist(); setTimeout(scanFolders, 2000);} 
+ if(S.mode=='acct'){hist(); fetchProfile(); setTimeout(scanFolders, 2000);} 
  if(ready())run();else if(!S.items.length)setTimeout(openSettings,400);
 })})});
 })();

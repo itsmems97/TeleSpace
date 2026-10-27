@@ -56,7 +56,7 @@ window.TGDriver={
         });
     },
     code:function(v){
-        return client.invoke(new L.Api.auth.SignIn({phoneNumber:phone,phoneCodeHash:hash,phoneCode:Number(v)})).then(ready,function(e){
+        return client.invoke(new L.Api.auth.SignIn({phoneNumber:phone,phoneCodeHash:hash,phoneCode:String(v).replace(/\D/g,"")})).then(ready,function(e){
             if(e&&e.errorMessage==="SESSION_PASSWORD_NEEDED")return {next:"pass"};
             throw e;
         });

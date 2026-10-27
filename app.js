@@ -1,6 +1,6 @@
 (function(){
 var $=function(s){return document.querySelector(s)};
-var S={mode:'',tab:'home',q:'',f:'all',items:[],cfg:{token:'',chat:''},db:null,active:0,sheet:false,_lastCount:-1,_lastState:-1,profilePic:'',selectMode:false,selected:new Set()};
+var S={mode:'',tab:'home',q:'',f:'all',items:[],cfg:{token:'',chat:''},db:null,active:0,sheet:false,_lastCount:-1,_lastState:-1,profilePic:'',selectMode:false,selected:new Set(),syncFolders:[]};
 var KINDS=[['image','Images','photo','photos'],['video','Videos','video','videos'],['app','Apps','app','apps'],['zip','Archives','file','files'],['audio','Audio','track','tracks'],['doc','Documents','file','files'],['other','Other','file','files']];
 var ICON={image:'photos',video:'video',audio:'audio',doc:'doc',zip:'zip',app:'apk',other:'doc'};
 try{var c=JSON.parse(localStorage.getItem('tgcfg')||'{}');S.cfg.token=c.token||'';S.cfg.chat=c.chat||''}catch(e){}
@@ -23,12 +23,29 @@ function toast(m){var t=$('#toast');t.textContent=m;t.style.display='block';clea
 function ready(){return S.mode=='acct'||!!(S.cfg.token&&S.cfg.chat)}
 
 /* storage */
-function openDb(cb){try{var r=indexedDB.open('telegrive-web',1);r.onupgradeneeded=function(){r.result.createObjectStore('f',{keyPath:'fp'})};r.onsuccess=function(){S.db=r.result;cb()};r.onerror=function(){cb()};r.onblocked=function(){cb()}}catch(e){cb()}}
+function openDb(cb){try{var r=indexedDB.open('telegrive-web',2);r.onupgradeneeded=function(e){var db=e.target.result;if(!db.objectStoreNames.contains('f'))db.createObjectStore('f',{keyPath:'fp'});if(!db.objectStoreNames.contains('sync'))db.createObjectStore('sync',{keyPath:'name'});};r.onsuccess=function(){S.db=r.result;cb()};r.onerror=function(){cb()};r.onblocked=function(){cb()}}catch(e){cb()}}
 function save(it){if(!S.db)return;try{S.db.transaction('f','readwrite').objectStore('f').put(it)}catch(e){}}
 function delDb(fp){if(!S.db)return;try{S.db.transaction('f','readwrite').objectStore('f').delete(fp)}catch(e){}}
 function loadAll(cb){if(!S.db)return cb();try{var q=S.db.transaction('f').objectStore('f').getAll?S.db.transaction('f').objectStore('f').getAll():null;
  if(!q){var a=[];S.db.transaction('f').objectStore('f').openCursor().onsuccess=function(e){var c=e.target.result;if(c){a.push(c.value);c.continue()}else{S.items=a;cb()}};return}
  q.onsuccess=function(){S.items=q.result||[];cb()};q.onerror=function(){cb()}}catch(e){cb()}}
+
+function loadSyncFolders(cb){
+    if(!S.db) return cb();
+    try {
+        var q = S.db.transaction('sync').objectStore('sync').getAll();
+        q.onsuccess = function() { S.syncFolders = q.result || []; cb(); };
+        q.onerror = function() { cb(); };
+    } catch(e) { cb(); }
+}
+function saveSyncFolder(f) {
+    if(!S.db) return;
+    try { S.db.transaction('sync','readwrite').objectStore('sync').put(f); } catch(e){}
+}
+function rmSyncFolder(name) {
+    if(!S.db) return;
+    try { S.db.transaction('sync','readwrite').objectStore('sync').delete(name); } catch(e){}
+}
 
 /* upload */
 function send(it,done){
@@ -44,7 +61,7 @@ function send(it,done){
   if(r.ok){it.state='done';it.msgId=r.result.message_id;it.blob=null;it.p=1;it.err='';save(it);done()}
   else if(r.error_code==429){setTimeout(function(){send(it,done)},((r.parameters&&r.parameters.retry_after)||5)*1000)}
   else fail(it,r.description||'Telegram did not accept this file.',done)};
- x.onerror=function(){fail(it,'No connection. It tries again next time you open Telegrive.',done)};
+ x.onerror=function(){fail(it,'No connection.',done)};
  x.send(fd)
 }
 function fail(it,m,done){it.state='fail';it.err=m;save(it);done()}
@@ -65,9 +82,40 @@ function add(files){var fresh=0,skipped=0,i,have={};
  toast(fresh?(fresh+' to back up'+(skipped?', '+skipped+' skipped':'')):(skipped+' already backed up.'));
  if(!ready()&&fresh){openSettings();return}
  run();paint()}
-function thumb(it){if(kind(it)!='image'||!window.URL)return;var im=new Image(),u=URL.createObjectURL(it.blob);
- im.onload=function(){try{var s=Math.min(1,200/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,im.width*s);c.height=Math.max(1,im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);it.thumb=c.toDataURL('image/jpeg',.7);save(it);paint()}catch(e){}URL.revokeObjectURL(u)};
- im.onerror=function(){URL.revokeObjectURL(u)};im.src=u}
+
+/* Video & Image Thumbnail Generation */
+function thumb(it){
+    if(!window.URL) return;
+    let k = kind(it);
+    if(k !== 'image' && k !== 'video') return;
+    if(!it.blob) return; 
+    let u = URL.createObjectURL(it.blob);
+    if (k === 'image') {
+        let im = new Image();
+        im.onload = () => makeThumb(im, it, u);
+        im.src = u;
+    } else if (k === 'video') {
+        let vid = document.createElement('video');
+        vid.src = u; vid.muted = true; vid.playsInline = true;
+        vid.onloadeddata = () => { vid.currentTime = 1; };
+        vid.onseeked = () => { makeThumb(vid, it, u); };
+    }
+}
+function makeThumb(el, it, u) {
+    try {
+        let w = el.width || el.videoWidth;
+        let h = el.height || el.videoHeight;
+        if (!w || !h) throw 'no dims';
+        let s = Math.min(1, 200 / Math.max(w, h));
+        let c = document.createElement('canvas');
+        c.width = Math.max(1, w * s); c.height = Math.max(1, h * s);
+        c.getContext('2d').drawImage(el, 0, 0, c.width, c.height);
+        it.thumb = c.toDataURL('image/jpeg', 0.7);
+        save(it);
+        paint();
+    } catch (e) {}
+    URL.revokeObjectURL(u);
+}
 
 /* views */
 function slot(it){var k=kind(it);return '<div class="slot">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':ic(ICON[k],'color:var(--k-'+k+')'))+'</div>'}
@@ -84,17 +132,18 @@ function row(it){
  let err = it.state=='fail' ? '<span class="bd">'+esc(it.err||'Failed')+'</span>' : (it.state=='deleted' ? '<span class="bd">Deleted from Telegram</span>' : fmt(it.size)+' &middot; '+dt(it.mtime));
 
  let action = S.selectMode ? 'select_file' : 'view';
- let chk = S.selectMode ? '<div style="margin-right:12px;color:var(--ac);font-size:22px">'+(S.selected.has(it.fp)?'☑':'☐')+'</div>' : '';
+ let isSel = S.selected.has(it.fp);
+ let chk = S.selectMode ? '<div class="chk-icon" style="margin-right:12px;color:var(--ac);font-size:22px">'+(isSel?'☑':'☐')+'</div>' : '';
  let del = (!S.selectMode && it.state!='deleted') ? '<button class="ib" style="color:var(--bad);margin-left:8px" data-a="del" data-fp="'+it.fp+'"><svg class="i" viewBox="0 0 24 24"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>' : '';
 
- return '<div class="r" data-a="'+action+'" data-fp="'+it.fp+'">'+chk+slot(it)+'<div class="m"><div class="t">'+esc(it.name)+'</div><div class="mt">'+err+'</div>'+bar+'</div>'+st+del+'</div>'
+ return '<div class="r '+(isSel?'selected-item':'')+'" data-a="'+action+'" data-fp="'+it.fp+'">'+chk+slot(it)+'<div class="m"><div class="t">'+esc(it.name)+'</div><div class="mt">'+err+'</div>'+bar+'</div>'+st+del+'</div>'
 }
+
 function counts(){var c={up:0,q:0,f:0,d:0,del:0,p:0,n:0},i,it;for(i=0;i<S.items.length;i++){it=S.items[i];if(it.state=='up'){c.up++;c.p+=it.p||0}else if(it.state=='queued')c.q++;else if(it.state=='fail')c.f++;else if(it.state=='deleted')c.del++;else c.d++;}c.n=c.up+c.q;return c}
 
 function head(t, extra){
   return '<div class="top"><h1>'+t+'</h1>'+ (extra||'') +'<button class="ib" data-a="settings">'+ic('cloud')+'</button></div>';
 }
-
 function status(){var c=counts();
  if(!ready())return '<div class="card"><div class="r"><div class="m"><div class="t">Connect your Telegram channel</div><div class="s">Add a bot token and channel to start backing up.</div></div><button class="lnk" data-a="settings">Set up</button></div></div>';
  var h='';
@@ -126,16 +175,36 @@ function files(){
   var F=[['all','All'],['image','Photos'],['video','Videos'],['doc','Documents'],['tr','Transfers'],['deleted','Deleted']];
   let extra = S.selectMode ? '<button class="lnk" style="margin-right:12px" data-a="cancel_select">Cancel</button>' : '<button class="lnk" style="margin-right:12px" data-a="select_mode">Select</button>';
   
-  // Yahan Cloud Icon hata diya gaya hai (head function use nahi kiya)
+  let selBar = S.selectMode && S.selected.size ? '<div id="sel-bar">'+
+      '<button class="btn" data-a="dl_selected" style="background:var(--ac)">Download ('+S.selected.size+')</button>'+
+      '<button class="btn" data-a="del_selected" style="background:var(--bad)">Delete ('+S.selected.size+')</button>'+
+  '</div>' : '';
+
   return '<div class="top"><h1>Files</h1>'+extra+'</div>'
-  +'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search files" value="'+esc(S.q)+'"></div><div class="chips">'+F.map(function(f){return '<button class="chip'+(S.f==f[0]?' on':'')+'" data-a="f" data-k="'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div><div id="list">'+listHtml()+'</div>'
-  + (S.selectMode ? '<div style="position:fixed;bottom:100px;left:0;right:0;display:flex;justify-content:center;z-index:10"><button class="btn" data-a="del_selected" style="background:var(--bad);box-shadow:0 4px 12px rgba(255,59,48,0.4)">Delete Selected ('+S.selected.size+')</button></div>' : '')
+  +'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search files" value="'+esc(S.q)+'"></div><div class="chips">'+F.map(function(f){return '<button class="chip'+(S.f==f[0]?' on':'')+'" data-a="f" data-k="'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div><div id="list">'+listHtml()+'</div>'+selBar;
 }
 
-function photos(){var P=S.items.filter(function(it){var k=kind(it);return (k=='image'||k=='video') && it.state!='deleted'}),g={},o=[],h='';
- P.sort(function(a,b){return b.mtime-a.mtime}).forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
- o.forEach(function(m){h+='<div class="sec">'+m+'</div><div class="grid">'+g[m].map(function(it){return '<div class="cell" data-a="view" data-fp="'+it.fp+'">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+')">'+ic(ICON[kind(it)])+'</div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em></div>'}).join('')+'</div>'});
- return head('Photos')+status()+(h||'<div class="empty">No photos backed up yet.</div>')+(ready()?'<div style="margin-top:16px"><button class="btn" data-a="pickM">Choose photos</button></div>':'')}
+function photos(){
+  var P=S.items.filter(function(it){var k=kind(it);return (k=='image'||k=='video') && it.state!='deleted'}),g={},o=[],h='';
+  P.sort(function(a,b){return b.mtime-a.mtime}).forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
+  
+  o.forEach(function(m){
+    h+='<div class="sec">'+m+'</div><div class="grid">'+g[m].map(function(it){
+      let isSel = S.selected.has(it.fp);
+      let action = S.selectMode ? 'select_file' : 'view';
+      return '<div class="cell '+(isSel?'selected-item':'')+'" data-a="'+action+'" data-fp="'+it.fp+'">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+')">'+ic(ICON[kind(it)])+'</div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em></div>'
+    }).join('')+'</div>'
+  });
+
+  let extra = S.selectMode ? '<button class="lnk" style="margin-right:12px" data-a="cancel_select">Cancel</button>' : '<button class="lnk" style="margin-right:12px" data-a="select_mode">Select</button>';
+
+  let selBar = S.selectMode && S.selected.size ? '<div id="sel-bar">'+
+      '<button class="btn" data-a="dl_selected" style="background:var(--ac)">Download ('+S.selected.size+')</button>'+
+      '<button class="btn" data-a="del_selected" style="background:var(--bad)">Delete ('+S.selected.size+')</button>'+
+  '</div>' : '';
+
+  return head('Photos', extra)+status()+(h||'<div class="empty">No photos backed up yet.</div>')+(ready()?'<div style="margin-top:16px"><button class="btn" data-a="pickM">Choose photos</button></div>':'')+selBar;
+}
 
 function render(){var v=S.tab=='home'?home():S.tab=='files'?files():photos();$('#app').innerHTML=v;if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
  $('#nav').innerHTML=[['home','Home','home'],['files','Files','folder'],['photos','Photos','photos']].map(function(t){return '<button data-a="tab" data-k="'+t[0]+'" class="'+(S.tab==t[0]?'on':'')+'"><span>'+ic(t[2])+'</span>'+t[1]+'</button>'}).join('');live()}
@@ -218,39 +287,124 @@ function showMedia(blob, name, type){
   $('#vDownload').style.display = 'inline-block';
 }
 
-/* Delete */
+/* Delete & Download Actions */
 function doDelete(fp){
   let it = S.items.find(x=>x.fp==fp);
   if(!it) return;
   if(confirm("Delete this file from Telegram and TeleSpace?")) {
-     if(it.msgId && window.TGDriver) {
-         window.TGDriver.deleteMessages([it.msgId]).catch(e=>console.log("Telegram delete err:", e));
-     }
-     S.items = S.items.filter(x=>x.fp!==fp);
-     delDb(fp);
-     paint();
+     if(it.msgId && window.TGDriver) window.TGDriver.deleteMessages([it.msgId]).catch(e=>console.log("Telegram delete err:", e));
+     S.items = S.items.filter(x=>x.fp!==fp); delDb(fp); paint();
   }
 }
 
 function doDeleteSelected(){
   if(!S.selected.size) return;
-  if(confirm("Delete "+S.selected.size+" selected files?")){
+  if(confirm("Delete "+S.selected.size+" selected files from Telegram and TeleSpace?")){
      let ids = [];
      S.items.forEach(it=>{
-        if(S.selected.has(it.fp)) {
-           if(it.msgId) ids.push(it.msgId);
-           delDb(it.fp);
-        }
+        if(S.selected.has(it.fp)) { if(it.msgId) ids.push(it.msgId); delDb(it.fp); }
      });
      if(ids.length && window.TGDriver) window.TGDriver.deleteMessages(ids).catch(e=>console.log(e));
      S.items = S.items.filter(it=>!S.selected.has(it.fp));
-     S.selected.clear();
-     S.selectMode=false;
-     paint();
+     S.selected.clear(); S.selectMode=false; paint();
   }
 }
 
-/* Text Confirmation Modals */
+async function doDownloadSelected(){
+    if(!S.selected.size) return;
+    toast("Downloading " + S.selected.size + " files...");
+    for(let it of S.items) {
+        if(S.selected.has(it.fp)) {
+            if(it.state == 'done' && window.TGDriver) {
+                try {
+                    let buf = await window.TGDriver.getMedia(it.msgId);
+                    let url = URL.createObjectURL(new Blob([buf]));
+                    let a = document.createElement('a');
+                    a.href = url; a.download = it.name;
+                    document.body.appendChild(a); a.click(); a.remove();
+                    URL.revokeObjectURL(url);
+                } catch(e) { console.log(e); }
+            } else if(it.blob) {
+                let url = URL.createObjectURL(it.blob);
+                let a = document.createElement('a');
+                a.href = url; a.download = it.name;
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            }
+        }
+    }
+    S.selectMode=false; S.selected.clear(); render();
+}
+
+/* Auto Sync */
+async function openAutoSync() {
+    S.sheet = true;
+    renderAutoSyncUI();
+}
+
+async function renderAutoSyncUI() {
+    let list = '';
+    if (S.syncFolders.length === 0) list = '<div class="empty">No folders added.</div>';
+    else {
+        list = S.syncFolders.map((f, i) => `
+            <div class="r">
+                <div class="m"><div class="t">${esc(f.name)}</div></div>
+                <button class="lnk bd" data-a="rm_sync" data-k="${f.name}">Remove</button>
+            </div>
+        `).join('');
+    }
+
+    $('#sh').innerHTML = `<div class="grab"></div>
+        <h2>Auto-Sync Folders</h2>
+        <div class="s">Select folders to automatically backup new files.</div>
+        <div style="margin: 16px 0">
+            <button class="btn" id="addFolderBtn" style="width:100%">+ Add Folder</button>
+        </div>
+        <div class="card">${list}</div>
+        <button class="btn o" data-a="close" style="width:100%;margin-top:16px">Close</button>`;
+    $('#ov').style.display = 'flex';
+
+    $('#addFolderBtn').onclick = async () => {
+        try {
+            if(!window.showDirectoryPicker) return toast('Your browser does not support this. Use + button instead.');
+            const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+            let exists = S.syncFolders.find(f => f.name === dirHandle.name);
+            if (exists) return toast('Folder already added');
+
+            S.syncFolders.push({ name: dirHandle.name, handle: dirHandle });
+            saveSyncFolder({ name: dirHandle.name, handle: dirHandle });
+            renderAutoSyncUI();
+            toast('Folder added!');
+            scanFolders(); 
+        } catch (e) {
+            if (e.name !== 'AbortError') toast('Error accessing folder');
+        }
+    };
+}
+
+async function scanFolders() {
+    if (!S.syncFolders.length || !ready()) return;
+    toast('Scanning folders...');
+    let added = 0;
+    for (let f of S.syncFolders) {
+        try {
+            if (await f.handle.queryPermission({mode: 'read'}) !== 'granted') {
+                try { await f.handle.requestPermission({mode: 'read'}); } catch(e) { continue; }
+            }
+            for await (const entry of f.handle.values()) {
+                if (entry.kind === 'file') {
+                    let file = await entry.getFile();
+                    let fp = file.name + '|' + file.size + '|' + file.lastModified;
+                    if (!S.items.find(x => x.fp === fp)) { add([file]); added++; }
+                }
+            }
+        } catch(e) { console.log("Scan error", e); }
+    }
+    if(added) toast(added + ' new files found in auto-sync folders!');
+    else toast('Auto-sync up to date.');
+}
+
+/* Modals */
 function showConfirm(actionType, title, desc, expectedText, btnText, btnColor) {
   S.sheet = true;
   $('#sh').innerHTML = '<div class="grab"></div><h2>'+title+'</h2><div class="s">'+desc+'</div>'+
@@ -267,13 +421,10 @@ function showConfirm(actionType, title, desc, expectedText, btnText, btnColor) {
     if(v === expectedText.toLowerCase()) {
        if(actionType === 'safe') logoutAction('safe');
        if(actionType === 'factory') logoutAction('delete');
-    } else {
-       toast('Incorrect text, try again.');
-    }
+    } else { toast('Incorrect text, try again.'); }
   };
 }
 
-/* Proxy */
 function openProxy() {
   S.sheet = true;
   let p = {};
@@ -282,24 +433,18 @@ function openProxy() {
   '<label>Server</label><input id="px_ip" value="'+esc(p.ip||'')+'" placeholder="1.2.3.4">'+
   '<label>Port</label><input id="px_port" type="number" value="'+(p.port||'')+'" placeholder="443">'+
   '<label>Secret</label><input id="px_sec" value="'+esc(p.secret||'')+'" placeholder="ee...">'+
-  '<div style="margin-top:20px;display:flex">'+
-  '<button class="btn" id="px_save" style="flex:1;margin-right:8px">Save</button>'+
-  '<button class="btn o" data-a="close">Cancel</button></div>';
+  '<div style="margin-top:20px;display:flex"><button class="btn" id="px_save" style="flex:1;margin-right:8px">Save</button><button class="btn o" data-a="close">Cancel</button></div>';
   $('#ov').style.display='flex';
   
   $('#px_save').onclick = function() {
-    let ip = $('#px_ip').value.trim();
-    let port = $('#px_port').value.trim();
-    let sec = $('#px_sec').value.trim();
+    let ip = $('#px_ip').value.trim(), port = $('#px_port').value.trim(), sec = $('#px_sec').value.trim();
     if(ip && port && sec) {
       localStorage.setItem('tgproxy', JSON.stringify({ip, port, secret: sec}));
-      toast('Proxy saved. Reloading...');
-      setTimeout(()=>location.reload(), 1000);
+      toast('Proxy saved. Reloading...'); setTimeout(()=>location.reload(), 1000);
     } else { toast('Please fill all fields'); }
   };
 }
 
-/* Profile */
 function openProfile(){
   S.sheet=true;
   $('#sh').innerHTML='<div class="grab"></div><div class="profile-hdr"><div class="av" id="pAv" style="width:80px;height:80px;font-size:30px;margin:0">ME</div><img id="pImg" style="display:none;width:80px;height:80px;border-radius:50%;object-fit:cover"><h3 id="pName">Loading...</h3><p id="pPhone"></p></div>'+
@@ -308,7 +453,7 @@ function openProfile(){
     '<button class="action-btn" data-a="proxy">'+ic('search')+' <span style="margin-left:12px">Add Proxy</span></button>'+
     '<a class="action-btn" href="privacy.html" target="_blank">'+ic('doc')+' <span style="margin-left:12px">Privacy & Policy</span></a>'+
     '<button class="action-btn" data-a="report">'+ic('warn')+' <span style="margin-left:12px">Report a problem</span></button>'+
-    '<button class="action-btn" data-a="autosync">'+ic('folder')+' <span style="margin-left:12px">Auto-Sync Folder</span></button>'+
+    '<button class="action-btn" data-a="autosync">'+ic('folder')+' <span style="margin-left:12px">Auto-Sync Folders</span></button>'+
   '</div>'+
   '<div class="card">'+
     '<button class="action-btn" data-a="safe_logout">'+ic('warn')+' <span style="margin-left:12px">Safe Logout</span></button>'+
@@ -326,15 +471,11 @@ function openProfile(){
            window.TGDriver.getProfilePic(u.id, u.accessHash, u.photo).then(function(url){
                if(url){
                    S.profilePic = url; 
-                   $('#pImg').src = url;
-                   $('#pImg').style.display = 'block';
-                   $('#pAv').style.display = 'none';
+                   $('#pImg').src = url; $('#pImg').style.display = 'block'; $('#pAv').style.display = 'none';
                    if(S.tab=='home') render(); 
                }
            }).catch(function(){});
-        } else {
-           $('#pAv').textContent = (u.firstName || 'M').charAt(0).toUpperCase();
-        }
+        } else { $('#pAv').textContent = (u.firstName || 'M').charAt(0).toUpperCase(); }
      }).catch(function(e){ $('#pName').textContent = 'Not connected'; });
   }
 }
@@ -342,17 +483,23 @@ function openProfile(){
 function logoutAction(type){
    if(type=='safe'){
       localStorage.removeItem('tgsess'); localStorage.removeItem('tgmode');
-      S.mode=''; S.items=[]; S.profilePic='';
+      S.mode=''; S.profilePic='';
       toast('Logged out safely. Data remains in Telegram.');
       closeSheet(); render();
    } else if(type=='delete'){
-      localStorage.clear(); indexedDB.deleteDatabase('telegrive-web'); location.reload();
+      toast('Deleting channel and data...');
+      if(window.TGDriver && window.TGDriver.deleteChannel) {
+          window.TGDriver.deleteChannel().finally(() => {
+              localStorage.clear(); indexedDB.deleteDatabase('telegrive-web'); location.reload();
+          });
+      } else {
+          localStorage.clear(); indexedDB.deleteDatabase('telegrive-web'); location.reload();
+      }
    }
 }
 
 function openSettings(){
-  S.sheet=true;
-  var chVal = S.cfg.chat || '-100';
+  S.sheet=true; var chVal = S.cfg.chat || '-100';
   $('#sh').innerHTML='<div class="grab"></div><h2>Login to TeleSpace</h2>'+
   '<div class="chips" style="margin-bottom: 20px;">'+
     '<button class="chip on" data-a="login_tab" data-k="bot">Bot Token</button>'+
@@ -360,20 +507,16 @@ function openSettings(){
   '</div>'+
   '<div id="loginFormBot">'+
     '<div class="s" style="margin-bottom:10px;">Create a bot with @BotFather, add it to your private channel as an admin, then enter the details.</div>'+
-    '<label>Bot token</label>'+
-    '<input id="tk" type="password" autocomplete="off" placeholder="123456:ABC..." value="'+esc(S.cfg.token)+'">'+
-    '<label>Channel ID or @username</label>'+
-    '<input id="ch" autocomplete="off" placeholder="-1001234567890" value="'+esc(chVal)+'">'+
+    '<label>Bot token</label><input id="tk" type="password" autocomplete="off" placeholder="123456:ABC..." value="'+esc(S.cfg.token)+'">'+
+    '<label>Channel ID or @username</label><input id="ch" autocomplete="off" placeholder="-1001234567890" value="'+esc(chVal)+'">'+
     '<button class="btn" id="sv" style="width:100%; margin-top:16px">Save and test</button>'+
   '</div>'+
   '<div id="loginFormPhone" style="display:none;">'+
     '<div class="s" style="margin-bottom:15px;">Sign in securely using your phone number.</div>'+
     '<button class="btn" data-a="auth" data-k="phone" style="width:100%">Sign in with phone number</button>'+
   '</div>'+
-  '<label>Glass strength</label>'+
-  '<input id="gl" type="range" min="0" max="100" value="'+GL+'">'+
-  '<button class="btn o" data-a="close" style="width:100%; margin-top:16px">Close</button>'+
-  '<div class="s" id="msg" style="margin-top:12px"></div>';
+  '<label>Glass strength</label><input id="gl" type="range" min="0" max="100" value="'+GL+'">'+
+  '<button class="btn o" data-a="close" style="width:100%; margin-top:16px">Close</button><div class="s" id="msg" style="margin-top:12px"></div>';
   $('#ov').style.display='flex';
 }
 function closeSheet(){S.sheet=false;$('#ov').style.display='none';render()}
@@ -398,15 +541,14 @@ function hist(){
   var D=window.TGDriver;
   if(!D||!D.history)return;
   D.history().then(function(a){
-    if(!a || !a.length) return; 
+    if(!a) return; 
     var serverFps = new Set(a.map(function(x){return x.fp}));
     var changed=false;
     
     S.items.forEach(function(it){
-       if(it.state=='done' && !serverFps.has(it.fp) && (Date.now() - it.mtime > 5000)){
-           it.state='deleted';
-           save(it);
-           changed=true;
+       // Only mark as deleted if it's older than 10s to prevent race conditions
+       if(it.state=='done' && !serverFps.has(it.fp) && (Date.now() - it.mtime > 10000)){
+           it.state='deleted'; save(it); changed=true;
        }
     });
 
@@ -450,21 +592,56 @@ document.addEventListener('click',function(e){
  else if(a=='del'){ let fp = el.getAttribute('data-fp'); doDelete(fp); }
  else if(a=='select_mode'){ S.selectMode=true; S.selected.clear(); render(); }
  else if(a=='cancel_select'){ S.selectMode=false; S.selected.clear(); render(); }
+ 
+ // FLICKER FIX: Direct DOM manipulation instead of full render
  else if(a=='select_file'){
     let fp = el.getAttribute('data-fp');
-    if(S.selected.has(fp)) S.selected.delete(fp);
-    else S.selected.add(fp);
-    render();
+    if(S.selected.has(fp)) {
+        S.selected.delete(fp);
+        el.classList.remove('selected-item');
+        let chk = el.querySelector('.chk-icon');
+        if(chk) chk.innerHTML = '☐';
+    } else {
+        S.selected.add(fp);
+        el.classList.add('selected-item');
+        let chk = el.querySelector('.chk-icon');
+        if(chk) chk.innerHTML = '☑';
+    }
+    // Update bottom bar count without full re-render
+    let bar = document.getElementById('sel-bar');
+    if(bar) {
+        if(S.selected.size === 0) { bar.remove(); }
+        else {
+            let b1 = bar.querySelector('[data-a="dl_selected"]');
+            let b2 = bar.querySelector('[data-a="del_selected"]');
+            if(b1) b1.textContent = 'Download ('+S.selected.size+')';
+            if(b2) b2.textContent = 'Delete ('+S.selected.size+')';
+        }
+    } else if (S.selected.size > 0) {
+        // Create bar if it doesn't exist
+        let html = '<div id="sel-bar">'+
+          '<button class="btn" data-a="dl_selected" style="background:var(--ac)">Download ('+S.selected.size+')</button>'+
+          '<button class="btn" data-a="del_selected" style="background:var(--bad)">Delete ('+S.selected.size+')</button>'+
+        '</div>';
+        $('#app').insertAdjacentHTML('beforeend', html);
+    }
  }
  else if(a=='del_selected'){ doDeleteSelected(); }
+ else if(a=='dl_selected'){ doDownloadSelected(); }
  else if(a=='profile') openProfile();
  else if(a=='proxy') openProxy();
+ else if(a=='autosync') { openAutoSync(); }
+ else if(a=='rm_sync') { 
+    let n = el.getAttribute('data-k'); 
+    S.syncFolders = S.syncFolders.filter(f=>f.name!==n);
+    rmSyncFolder(n); renderAutoSyncUI(); toast('Folder removed');
+ }
  else if(a=='safe_logout') { showConfirm('safe', 'Safe Logout', 'Your data will remain in Telegram.', 'Logout', 'Logout', 'var(--ac)'); }
  else if(a=='delete_account') {
     $('#sh').innerHTML = '<div class="grab"></div><h2>Delete TeleSpace Account</h2><div class="s">Choose an option:</div><div style="margin-top:20px;display:flex;flex-direction:column;gap:10px"><button class="btn" data-a="factory_delete" style="background:var(--bad)">Factory Delete Backup Data</button><button class="btn o" data-a="do_logout">Keep Safe Data</button><button class="btn o" data-a="close">Cancel</button></div>';
  }
- else if(a=='factory_delete') showConfirm('factory', 'Factory Delete', 'This will delete local cache permanently.', 'delete', 'Delete', 'var(--bad)');
- else if(a=='do_logout') showConfirm('safe', 'Keep Safe Data', 'This will log you out but keep your data in Telegram.', 'delete', 'Logout', 'var(--ac)');
+ else if(a=='factory_delete') showConfirm('factory', 'Factory Delete', 'This will permanently delete your Telegram Channel and all local data.', 'delete', 'Delete Account', 'var(--bad)');
+ else if(a=='do_logout') showConfirm('safe', 'Keep Safe Data', 'This will log you out but keep your data in Telegram.', 'logout', 'Logout', 'var(--ac)');
  else if(a=='telegram_channel') { 
     if(!window.TGDriver || !window.TGDriver.getChannelLink) return toast('Not connected');
     toast('Opening channel...');
@@ -473,22 +650,29 @@ document.addEventListener('click',function(e){
         else toast('Could not get link');
     }).catch(function(e){ toast('Error opening channel'); });
  }
- else if(a=='autosync') { $('#pickDir').click(); }
  else if(a=='retry'){S.items.forEach(function(it){if(it.state=='fail'&&!it.big){it.state='queued';save(it)}});run()}
 });
 
 document.addEventListener('input',function(e){if(e.target.id=='q'){S.q=e.target.value;$('#list').innerHTML=listHtml()}else if(e.target.id=='gl')glass(+e.target.value)});
 $('#ov').addEventListener('click',function(e){if(e.target===this)closeSheet()});
-['pickM','pickA','pickDir'].forEach(function(id){$('#'+id).addEventListener('change',function(){if(this.files&&this.files.length)add(Array.prototype.slice.call(this.files));this.value=''})});
-document.addEventListener('visibilitychange',function(){if(!document.hidden)run()});
+['pickM','pickA','pickDir','pickDir2'].forEach(function(id){
+    if($('#'+id)) $('#'+id).addEventListener('change',function(){
+        if(this.files&&this.files.length)add(Array.prototype.slice.call(this.files));
+        this.value='';
+    })
+});
+document.addEventListener('visibilitychange',function(){if(!document.hidden){run();scanFolders();}});
 window.addEventListener('online',run);
 
-openDb(function(){loadAll(function(){
+openDb(function(){loadAll(function(){loadSyncFolders(function(){
  S.items = S.items.filter(function(it){
     if(it.state=='up'){it.state='queued'}
     if(it.state=='queued' && !it.blob) return false; 
     if(it.state=='fail' && !it.big && it.blob) it.state='queued';
     return true;
  });
- S.items.sort(function(a,b){return b.mtime-a.mtime});render();if(S.mode=='acct')hist();if(ready())run();else if(!S.items.length)setTimeout(openSettings,400)})});
+ S.items.sort(function(a,b){return b.mtime-a.mtime});render();
+ if(S.mode=='acct'){hist(); setTimeout(scanFolders, 2000);} 
+ if(ready())run();else if(!S.items.length)setTimeout(openSettings,400);
+})})});
 })();

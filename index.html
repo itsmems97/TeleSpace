@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Telegrive</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#F2F2F7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Telegrive">
+<style>
+:root{--bg:#F2F2F7;--sf:#fff;--sf2:rgba(120,120,128,.12);--line:rgba(60,60,67,.18);--tx:#000;--tx2:rgba(60,60,67,.7);--tx3:rgba(60,60,67,.45);--ac:#007AFF;--acs:rgba(0,122,255,.14);--ok:#28A745;--bad:#FF3B30;--gr:255,255,255;--ga:.7;--gb:28px;--k-image:#AF52DE;--k-video:#FF2D55;--k-audio:#FF9500;--k-doc:#007AFF;--k-zip:#A2845E;--k-app:#34C759;--k-other:#8E8E93;color-scheme:light dark}
+@media(prefers-color-scheme:dark){:root{--bg:#000;--sf:#1C1C1E;--sf2:rgba(120,120,128,.24);--line:rgba(84,84,88,.55);--tx:#fff;--tx2:rgba(235,235,245,.65);--tx3:rgba(235,235,245,.38);--ac:#0A84FF;--acs:rgba(10,132,255,.24);--ok:#30D158;--bad:#FF453A;--gr:44,44,48}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--tx);font:400 17px/22px -apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums}
+button,input{font:inherit;color:inherit}
+button{background:none;border:0;padding:0;cursor:pointer;transition:transform .3s cubic-bezier(.3,1.5,.5,1),background .25s,opacity .2s}
+button:active{transform:scale(.95)}
+.bg{position:fixed;left:0;top:0;right:0;bottom:0;overflow:hidden;z-index:0;pointer-events:none}
+.bg i{position:absolute;width:90vmax;height:90vmax;border-radius:50%;animation:dr 28s ease-in-out infinite alternate;opacity:.55}
+.bg i:nth-child(1){background:radial-gradient(circle,rgba(76,141,255,.55),transparent 62%);left:-45vmax;top:-40vmax}
+.bg i:nth-child(2){background:radial-gradient(circle,rgba(179,107,255,.45),transparent 62%);right:-55vmax;top:15vh;animation-delay:-9s}
+.bg i:nth-child(3){background:radial-gradient(circle,rgba(46,211,183,.4),transparent 62%);left:-30vmax;bottom:-55vmax;animation-delay:-17s}
+@keyframes dr{to{transform:translate3d(10vmax,7vmax,0) scale(1.12)}}
+#app{position:relative;z-index:1;max-width:560px;margin:0 auto;padding:calc(10px + env(safe-area-inset-top,0px)) 20px calc(190px + env(safe-area-inset-bottom,0px))}
+#app.in>*{animation:rise .55s cubic-bezier(.2,.9,.25,1) both}
+#app.in>*:nth-child(2){animation-delay:.05s}#app.in>*:nth-child(3){animation-delay:.1s}#app.in>*:nth-child(4){animation-delay:.15s}#app.in>*:nth-child(5){animation-delay:.2s}#app.in>*:nth-child(n+6){animation-delay:.25s}
+@keyframes rise{from{opacity:0;transform:translateY(16px) scale(.985)}}
+svg.i{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.top{display:flex;align-items:center;min-height:56px;margin-bottom:4px}
+.top b{font-size:28px;line-height:34px;font-weight:700;margin-left:10px;flex:1}
+.top h1{font-size:34px;line-height:41px;font-weight:700;margin:0;flex:1}
+.av{width:44px;height:44px;border-radius:22px;background:var(--sf2);font-weight:600;font-size:15px;margin-left:6px}
+.ib{width:44px;height:44px;border-radius:22px;display:flex;align-items:center;justify-content:center;color:var(--ac)}
+.field{display:flex;align-items:center;background:var(--sf2);border-radius:14px;padding:0 12px;height:44px;color:var(--tx3);margin:8px 0 18px}
+.field input{flex:1;border:0;background:none;outline:0;margin-left:8px;color:var(--tx);min-width:0;font-size:17px}
+.card{background:var(--sf);border-radius:24px;overflow:hidden;margin-bottom:10px}
+.sec{font-size:13px;line-height:18px;font-weight:600;color:var(--tx2);margin:26px 0 8px 16px}
+.r{display:flex;align-items:center;padding:13px 16px;width:100%;text-align:left}
+.r+.r{border-top:.5px solid var(--line)}
+.r .m{flex:1;min-width:0}
+.t{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.s{font-size:15px;line-height:20px;color:var(--tx2)}
+.mt{font-size:13px;line-height:18px;color:var(--tx3)}
+.lnk{color:var(--ac);font-weight:600}
+.bar{height:6px;border-radius:3px;background:var(--sf2);overflow:hidden;margin-top:10px;display:flex}
+.bar i{display:block;height:100%;background:var(--ac);border-radius:3px;transition:width .45s cubic-bezier(.2,.9,.25,1)}
+.pad{padding:14px 16px}
+.btn{background:var(--ac);color:#fff;font-weight:600;border-radius:26px;height:50px;padding:0 24px;display:inline-flex;align-items:center;justify-content:center}
+.btn.o{background:var(--sf2);color:var(--tx)}
+.slot{width:48px;height:48px;border-radius:12px;background:var(--sf2);margin-right:12px;display:flex;align-items:center;justify-content:center;overflow:hidden;flex:none}
+.slot img{width:100%;height:100%;object-fit:cover}
+.chips{display:flex;overflow-x:auto;margin:0 -20px 10px;padding:0 20px;-webkit-overflow-scrolling:touch}
+.chip{flex:none;border-radius:18px;height:36px;padding:0 16px;margin-right:8px;font-size:15px;font-weight:600;color:var(--tx2);background:var(--sf2)}
+.chip.on{background:var(--ac);color:#fff}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);grid-gap:2px;margin:0 -20px}
+.cell{position:relative;padding-bottom:100%;background:var(--sf2);overflow:hidden}
+.cell img,.cell .c{position:absolute;left:0;top:0;width:100%;height:100%;object-fit:cover;display:flex;align-items:center;justify-content:center}
+.cell em{position:absolute;right:6px;bottom:6px;width:9px;height:9px;border-radius:5px;background:var(--ac);box-shadow:0 0 0 2px rgba(255,255,255,.8)}
+.cell em.d{display:none}
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:0 16px calc(10px + env(safe-area-inset-bottom,0px));pointer-events:none}
+#nav,#live,.sh,#toast{background:rgba(var(--gr),var(--ga));-webkit-backdrop-filter:blur(var(--gb)) saturate(180%);backdrop-filter:blur(var(--gb)) saturate(180%);box-shadow:0 10px 32px rgba(0,0,0,.16),inset 0 0 0 .5px rgba(255,255,255,.45)}
+#nav{pointer-events:auto;display:flex;max-width:400px;margin:0 auto;padding:6px;border-radius:38px}
+#nav button{flex:1;display:flex;flex-direction:column;align-items:center;padding:7px 0 6px;border-radius:32px;font-size:11px;line-height:13px;font-weight:600;color:var(--tx2);transition:background .35s,color .35s,transform .3s cubic-bezier(.3,1.5,.5,1)}
+#nav button span{display:flex;margin-bottom:2px}
+#nav button.on{background:rgba(120,120,128,.2);color:var(--ac)}
+#live{position:fixed;left:16px;right:16px;bottom:calc(158px + env(safe-area-inset-bottom,0px));border-radius:22px;padding:10px 16px 12px;display:none;z-index:4;max-width:528px;margin:0 auto}
+#live .bar{margin-top:6px}
+.fab{position:fixed;right:20px;right:max(20px,calc(50% - 260px));bottom:calc(92px + env(safe-area-inset-bottom,0px));width:58px;height:58px;border-radius:29px;background:var(--ac);color:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 26px rgba(0,122,255,.45),inset 0 1px 0 rgba(255,255,255,.4);z-index:6}
+.ov{position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.38);display:none;align-items:flex-end;justify-content:center;z-index:9;animation:fd .3s ease-out}
+@keyframes fd{from{opacity:0}}
+.sh{width:100%;max-width:560px;border-radius:34px 34px 0 0;padding:10px 20px calc(24px + env(safe-area-inset-bottom,0px));max-height:92%;overflow:auto;background:rgba(var(--gr),.9);animation:up .45s cubic-bezier(.2,.9,.25,1)}
+@keyframes up{from{transform:translateY(100%)}}
+.grab{width:40px;height:5px;border-radius:3px;background:var(--tx3);margin:0 auto 14px}
+.sh h2{font-size:22px;line-height:28px;font-weight:700;margin:0 0 6px}
+.sh label{display:block;font-size:13px;font-weight:600;color:var(--tx2);margin:16px 0 6px 4px}
+.sh input{width:100%;height:50px;border:0;background:var(--sf2);border-radius:16px;padding:0 16px;font-size:17px;outline:0}
+.sh input[type=range]{padding:0;height:32px;background:none}
+.sh input:focus{box-shadow:0 0 0 2px var(--ac)}
+#toast{position:fixed;left:20px;right:20px;top:calc(12px + env(safe-area-inset-top,0px));max-width:420px;margin:0 auto;border-radius:22px;padding:12px 18px;font-size:15px;line-height:20px;display:none;z-index:10;animation:rise .4s cubic-bezier(.2,.9,.25,1)}
+.empty{color:var(--tx2);padding:40px 16px;text-align:center}
+.ok{color:var(--ok)}.bd{color:var(--bad)}
+@supports not ((-webkit-backdrop-filter:blur(1px)) or (backdrop-filter:blur(1px))){#nav,#live,.sh,#toast{background:var(--sf)}}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="bg"><i></i><i></i><i></i></div>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="home" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></symbol>
+<symbol id="folder" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="photos" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="M3 17l5-5 4 4 3-3 6 6"/></symbol>
+<symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="swap" viewBox="0 0 24 24"><path d="M8 4v16M8 4L5 7M8 4l3 3M16 20V4M16 20l-3-3M16 20l3-3"/></symbol>
+<symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4-4"/></symbol>
+<symbol id="cloud" viewBox="0 0 24 24"><path d="M7 18a4 4 0 0 1-.5-8A5.5 5.5 0 0 1 17 8.5 4 4 0 0 1 17 18z"/><path d="M9 13l2 2 4-4"/></symbol>
+<symbol id="video" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z"/></symbol>
+<symbol id="doc" viewBox="0 0 24 24"><path d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></symbol>
+<symbol id="audio" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2"/><circle cx="17" cy="16" r="2"/></symbol>
+<symbol id="zip" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM12 10v5"/></symbol>
+<symbol id="apk" viewBox="0 0 24 24"><path d="M5 17a7 7 0 0 1 14 0zM8 7l1.5 2M16 7l-1.5 2"/></symbol>
+<symbol id="chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+<symbol id="warn" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v6M12 16.5v.5"/></symbol>
+</defs></svg>
+
+<div id="app"></div>
+<div id="live"><div class="in"><div class="s" id="liveT"></div><div class="bar"><i id="liveB" style="width:0"></i></div></div></div>
+<nav class="nav"><div id="nav"></div></nav>
+<button class="fab" id="fab" aria-label="Upload files"><svg class="i"><use href="#plus"/></svg></button>
+<div class="ov" id="ov"><div class="sh" id="sh"></div></div>
+<div id="toast"></div>
+<input type="file" id="pickM" multiple accept="image/*,video/*" style="display:none">
+<input type="file" id="pickA" multiple style="display:none">
+
+<script>
+(function(){
+var $=function(s){return document.querySelector(s)};
+var S={mode:'',tab:'home',q:'',f:'all',items:[],cfg:{token:'',chat:''},db:null,active:0,sheet:false};
+var KINDS=[['image','Images','photo','photos'],['video','Videos','video','videos'],['app','Apps','app','apps'],['zip','Archives','file','files'],['audio','Audio','track','tracks'],['doc','Documents','file','files'],['other','Other','file','files']];
+var ICON={image:'photos',video:'video',audio:'audio',doc:'doc',zip:'zip',app:'apk',other:'doc'};
+try{var c=JSON.parse(localStorage.getItem('tgcfg')||'{}');S.cfg.token=c.token||'';S.cfg.chat=c.chat||''}catch(e){}
+try{if(window.TGDriver&&localStorage.getItem('tgmode')=='acct')S.mode='acct'}catch(e){}
+var GL=70;try{GL=+(localStorage.getItem('tggl')||70)}catch(e){}
+function glass(v){GL=v;var r=document.documentElement.style;r.setProperty('--ga',(.4+v/100*.48).toFixed(2));r.setProperty('--gb',(14+v/100*24)+'px');try{localStorage.setItem('tggl',v)}catch(e){}}glass(GL);
+
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function ic(n,st){return '<svg class="i"'+(st?' style="'+st+'"':'')+'><use href="#'+n+'"/></svg>'}
+function fmt(n){if(n<1024)return n+' B';var u=['KB','MB','GB','TB'],i=-1;do{n/=1024;i++}while(n>=1024&&i<3);return (n>=100||i==0?Math.round(n):n.toFixed(1))+' '+u[i]}
+function dt(t,o){try{return new Date(t).toLocaleDateString(undefined,o||{month:'short',day:'numeric',year:'numeric'})}catch(e){return ''}}
+function kind(it){var t=it.type||'',e=(it.name.split('.').pop()||'').toLowerCase();
+ if(/^image/.test(t)||/^(jpe?g|png|gif|webp|heic|heif|bmp)$/.test(e))return 'image';
+ if(/^video/.test(t)||/^(mp4|mov|m4v|mkv|webm|avi|3gp)$/.test(e))return 'video';
+ if(/^audio/.test(t)||/^(mp3|m4a|aac|wav|ogg|flac|opus)$/.test(e))return 'audio';
+ if(/^(pdf|docx?|xlsx?|pptx?|txt|csv|md|epub)$/.test(e))return 'doc';
+ if(/^(zip|rar|7z|tar|gz)$/.test(e))return 'zip';
+ if(/^(apk|ipa|xapk)$/.test(e))return 'app';return 'other'}
+function toast(m){var t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(function(){t.style.display='none'},3600)}
+function ready(){return S.mode=='acct'||!!(S.cfg.token&&S.cfg.chat)}
+
+/* storage: IndexedDB keeps the list, the thumbnails and any files still waiting */
+function openDb(cb){try{var r=indexedDB.open('telegrive-web',1);r.onupgradeneeded=function(){r.result.createObjectStore('f',{keyPath:'fp'})};r.onsuccess=function(){S.db=r.result;cb()};r.onerror=function(){cb()};r.onblocked=function(){cb()}}catch(e){cb()}}
+function save(it){if(!S.db)return;try{S.db.transaction('f','readwrite').objectStore('f').put(it)}catch(e){}}
+function loadAll(cb){if(!S.db)return cb();try{var q=S.db.transaction('f').objectStore('f').getAll?S.db.transaction('f').objectStore('f').getAll():null;
+ if(!q){var a=[];S.db.transaction('f').objectStore('f').openCursor().onsuccess=function(e){var c=e.target.result;if(c){a.push(c.value);c.continue()}else{S.items=a;cb()}};return}
+ q.onsuccess=function(){S.items=q.result||[];cb()};q.onerror=function(){cb()}}catch(e){cb()}}
+
+/* upload: original quality, sent as a document so Telegram does not recompress it */
+function send(it,done){if(S.mode=='acct'&&window.TGDriver){window.TGDriver.upload(it.blob,it.name,function(p){it.p=p;paint()}).then(function(id){it.state='done';it.msg=id;it.blob=null;it.p=1;it.err='';save(it);done()},function(e){fail(it,String((e&&e.message)||e||'Upload failed'),done)});return}
+ var x=new XMLHttpRequest(),fd=new FormData();
+ fd.append('chat_id',S.cfg.chat);fd.append('disable_notification','true');fd.append('caption',it.name);fd.append('document',it.blob,it.name);
+ x.open('POST','https://api.telegram.org/bot'+S.cfg.token+'/sendDocument');
+ x.upload.onprogress=function(e){if(e.lengthComputable){it.p=e.loaded/e.total;paint()}};
+ x.onload=function(){var r={};try{r=JSON.parse(x.responseText)}catch(e){}
+  if(r.ok){it.state='done';it.msg=r.result.message_id;it.blob=null;it.p=1;it.err='';save(it);done()}
+  else if(r.error_code==429){setTimeout(function(){send(it,done)},((r.parameters&&r.parameters.retry_after)||5)*1000)}
+  else fail(it,r.description||'Telegram did not accept this file.',done)};
+ x.onerror=function(){fail(it,'No connection. It tries again next time you open Telegrive.',done)};
+ x.send(fd)}
+function fail(it,m,done){it.state='fail';it.err=m;save(it);done()}
+function run(){if(!ready())return;
+ while(S.active<2){var it=null,i;for(i=0;i<S.items.length;i++){if(S.items[i].state=='queued'){it=S.items[i];break}}
+  if(!it)break;
+  if(it.size>50*1024*1024){it.state='fail';it.big=true;it.err='Over 50 MB. Large files need the backend.';save(it);continue}
+  it.state='up';it.p=0;S.active++;(function(it){send(it,function(){S.active--;run();paint()})})(it)}
+ paint()}
+
+/* adding files: anything already uploaded (same name, size, date) is skipped */
+function add(files){var fresh=0,skipped=0,i,have={};
+ for(i=0;i<S.items.length;i++)have[S.items[i].fp]=1;
+ for(i=0;i<files.length;i++){var f=files[i],fp=f.name+'|'+f.size+'|'+f.lastModified;
+  if(have[fp]){skipped++;continue}have[fp]=1;fresh++;
+  var it={fp:fp,name:f.name,size:f.size,type:f.type,mtime:f.lastModified||Date.now(),state:'queued',p:0,blob:f};
+  S.items.unshift(it);save(it);thumb(it)}
+ toast(fresh?(fresh+' to back up'+(skipped?', '+skipped+' already backed up':'')):(skipped+' already backed up. Nothing new to send.'));
+ if(!ready()&&fresh){openSettings();return}
+ run();paint()}
+function thumb(it){if(kind(it)!='image'||!window.URL)return;var im=new Image(),u=URL.createObjectURL(it.blob);
+ im.onload=function(){try{var s=Math.min(1,200/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=Math.max(1,im.width*s);c.height=Math.max(1,im.height*s);c.getContext('2d').drawImage(im,0,0,c.width,c.height);it.thumb=c.toDataURL('image/jpeg',.7);save(it);paint()}catch(e){}URL.revokeObjectURL(u)};
+ im.onerror=function(){URL.revokeObjectURL(u)};im.src=u}
+
+/* views */
+function slot(it){var k=kind(it);return '<div class="slot">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':ic(ICON[k],'color:var(--k-'+k+')'))+'</div>'}
+function stat(it){if(it.state=='done')return '<span class="ok">'+ic('cloud')+'</span>';if(it.state=='up')return '<span class="mt">'+Math.round((it.p||0)*100)+'%</span>';if(it.state=='fail')return '<span class="bd">'+ic('warn')+'</span>';return '<span class="mt">Waiting</span>'}
+function row(it){return '<div class="r">'+slot(it)+'<div class="m"><div class="t">'+esc(it.name)+'</div><div class="mt">'+(it.state=='fail'?'<span class="bd">'+esc(it.err||'Failed')+'</span>':fmt(it.size)+' &middot; '+dt(it.mtime))+'</div></div>'+stat(it)+'</div>'}
+function counts(){var c={up:0,q:0,f:0,d:0,p:0,n:0},i,it;for(i=0;i<S.items.length;i++){it=S.items[i];if(it.state=='up'){c.up++;c.p+=it.p||0}else if(it.state=='queued')c.q++;else if(it.state=='fail')c.f++;else c.d++}c.n=c.up+c.q;return c}
+function head(t){return '<div class="top"><h1>'+t+'</h1><button class="ib" data-a="settings" aria-label="Settings">'+ic('cloud')+'</button></div>'}
+function status(){var c=counts();
+ if(!ready())return '<div class="card"><div class="r"><div class="m"><div class="t">Connect your Telegram channel</div><div class="s">Add a bot token and channel to start backing up.</div></div><button class="lnk" data-a="settings">Set up</button></div></div>';
+ var h='';
+ if(c.n){var tot=c.n+c.d,pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);h+='<div class="r" data-a="transfers"><div class="m"><div class="t">'+c.n+' transfer'+(c.n>1?'s':'')+' in progress</div><div class="s">'+pct+'% done</div><div class="bar"><i style="width:'+pct+'%"></i></div></div></div>'}
+ if(c.f){h+='<div class="r"><div class="m"><div class="t">'+c.f+' transfer'+(c.f>1?'s':'')+' failed</div><div class="s">Open Transfers to see why.</div></div><button class="lnk" data-a="retry">Retry</button></div>'}
+ if(!h)h='<div class="r"><span class="ok" style="margin-right:12px">'+ic('cloud')+'</span><div class="m"><div class="t">Backup is up to date</div><div class="s">'+c.d+' item'+(c.d==1?'':'s')+' in your channel</div></div></div>';
+ return '<div class="card">'+h+'</div>'}
+function home(){var by={},tot=0,n=0,i,it,k;
+ for(i=0;i<S.items.length;i++){it=S.items[i];if(it.state!='done')continue;k=kind(it);by[k]=by[k]||{n:0,b:0};by[k].n++;by[k].b+=it.size;tot+=it.size;n++}
+ var seg='',rows='';
+ KINDS.forEach(function(K){var b=by[K[0]];if(!b)return;seg+='<i style="width:'+(b.b/Math.max(1,tot)*100)+'%;background:var(--k-'+K[0]+')"></i>';
+  rows+='<button class="r" data-a="kind" data-k="'+K[0]+'">'+ic(ICON[K[0]],'color:var(--k-'+K[0]+');margin-right:16px')+'<span class="m t">'+K[1]+'</span><span class="s">'+b.n+' '+(b.n==1?K[2]:K[3])+' &middot; '+fmt(b.b)+'</span>'+ic('chev','color:var(--tx3);margin-left:8px;width:20px')+'</button>'});
+ return '<div class="top"><svg width="36" height="36" viewBox="0 0 36 36"><path d="M4 16L19 8l-4 13z" fill="#3085FE"/><path d="M20 6l12-3-6 13z" fill="#0EBC5F"/><path d="M17 23l9-5 4 12z" fill="#FDCD06"/></svg><b>Telegrive</b><button class="ib" data-a="transfers" aria-label="Transfers">'+ic('swap')+'</button><button class="av" data-a="settings">'+(ready()?'ME':'?')+'</button></div>'
+ +'<div class="field" data-a="search">'+ic('search')+'<span style="margin-left:12px">Search files and folders</span></div>'+status()
+ +(ready()?'<div class="card"><div class="r"><div class="m"><div class="t">Back up photos</div><div class="s">Choose photos and videos. New ones start uploading right away. Ones already in your channel are skipped.</div></div></div><div class="pad" style="padding-top:0"><button class="btn" data-a="pickM">Choose photos</button></div></div>':'')
+ +'<div class="sec">Storage</div>'+(n?'<div class="card"><div class="pad"><b style="font-size:17px;font-weight:700">'+fmt(tot)+'</b> <span class="s">in '+n+' file'+(n==1?'':'s')+'</span><div class="bar" style="height:6px">'+seg+'</div></div>'+rows+'</div>':'<div class="empty">Nothing in your drive yet. Tap + to upload a file.</div>')}
+function listHtml(){var q=S.q.toLowerCase(),L=S.items.filter(function(it){
+  if(S.f=='tr')return it.state!='done';if(S.f!='all'&&kind(it)!=S.f)return false;return !q||it.name.toLowerCase().indexOf(q)>-1});
+ return L.length?'<div class="card">'+L.map(row).join('')+'</div>':'<div class="empty">'+(S.f=='tr'?'No transfers running.':q?'No files match your search.':'No files here yet.')+'</div>'}
+function files(){var F=[['all','All'],['image','Photos'],['video','Videos'],['doc','Documents'],['tr','Transfers']];
+ return head('Files')+'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search files and folders" value="'+esc(S.q)+'"></div><div class="chips">'+F.map(function(f){return '<button class="chip'+(S.f==f[0]?' on':'')+'" data-a="f" data-k="'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div><div id="list">'+listHtml()+'</div>'}
+function photos(){var P=S.items.filter(function(it){var k=kind(it);return k=='image'||k=='video'}),g={},o=[],h='';
+ P.sort(function(a,b){return b.mtime-a.mtime}).forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
+ o.forEach(function(m){h+='<div class="sec">'+m+'</div><div class="grid">'+g[m].map(function(it){return '<div class="cell">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+')">'+ic(ICON[kind(it)])+'</div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em></div>'}).join('')+'</div>'});
+ return head('Photos')+status()+(h||'<div class="empty">No photos backed up yet. Tap Choose photos to start.</div>')+(ready()?'<div style="margin-top:16px"><button class="btn" data-a="pickM">Choose photos</button></div>':'')}
+function render(){var v=S.tab=='home'?home():S.tab=='files'?files():photos();$('#app').innerHTML=v;if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
+ $('#nav').innerHTML=[['home','Home','home'],['files','Files','folder'],['photos','Photos','photos']].map(function(t){return '<button data-a="tab" data-k="'+t[0]+'" class="'+(S.tab==t[0]?'on':'')+'"><span>'+ic(t[2])+'</span>'+t[1]+'</button>'}).join('');live()}
+function live(){var c=counts(),b=$('#live');if(!c.n||!ready()){b.style.display='none';return}
+ var pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);b.style.display='block';$('#liveT').textContent='Uploading '+c.n+' item'+(c.n>1?'s':'')+' · '+pct+'%';$('#liveB').style.width=pct+'%'}
+var pending=false;function paint(){if(pending)return;pending=true;(window.requestAnimationFrame||setTimeout)(function(){pending=false;
+ if(S.sheet)return live();if(S.tab=='files'&&$('#list')){$('#list').innerHTML=listHtml();live()}else render()})}
+
+/* settings sheet */
+function openSettings(){S.sheet=true;$('#sh').innerHTML='<div class="grab"></div><h2>Telegram channel</h2><div class="s">Create a bot with @BotFather, add it to your private channel as an admin, then enter the details below. They stay on this device.</div><label>Bot token</label><input id="tk" type="password" autocomplete="off" placeholder="123456:ABC..." value="'+esc(S.cfg.token)+'"><label>Channel ID or @username</label><input id="ch" autocomplete="off" placeholder="-1001234567890" value="'+esc(S.cfg.chat)+'"><button class="btn o" data-a="auth" data-k="phone" style="width:100%;margin-top:16px">Sign in with phone number</button><label>Glass strength</label><input id="gl" type="range" min="0" max="100" value="'+GL+'"><div style="margin-top:16px;display:flex"><button class="btn" id="sv" style="flex:1;margin-right:8px">Save and test</button><button class="btn o" data-a="close">Close</button></div><div class="s" id="msg" style="margin-top:12px"></div>';$('#ov').style.display='flex'}
+function closeSheet(){S.sheet=false;$('#ov').style.display='none';render()}
+function saveCfg(){var t=$('#tk').value.replace(/\s/g,''),c=$('#ch').value.replace(/\s/g,''),m=$('#msg');
+ if(!t||!c){m.textContent='Enter both the bot token and the channel.';return}
+ m.textContent='Checking...';var x=new XMLHttpRequest();x.open('GET','https://api.telegram.org/bot'+encodeURIComponent(t)+'/getChat?chat_id='+encodeURIComponent(c));
+ x.onload=function(){var r={};try{r=JSON.parse(x.responseText)}catch(e){}
+  if(r.ok){S.cfg={token:t,chat:c};try{localStorage.setItem('tgcfg',JSON.stringify(S.cfg))}catch(e){}m.innerHTML='<span class="ok">Connected to '+esc(r.result.title||'your channel')+'.</span>';setTimeout(function(){closeSheet();run()},700)}
+  else m.innerHTML='<span class="bd">'+esc(r.description||'Could not connect.')+' Check the token, and that the bot is an admin of the channel.</span>'};
+ x.onerror=function(){m.innerHTML='<span class="bd">No connection to Telegram.</span>'};x.send()}
+
+/* account sign-in: phone, code, password. The real work is done by window.TGDriver (see guide.md) */
+var AU={phone:['Your phone number','Use the full number with country code, like +966.','tel','+966 5xx xxx xxx','Continue'],code:['Enter the code','Telegram sent it to your other device or by SMS.','tel','Code','Verify'],password:['Two-step password','Enter the cloud password of your account.','password','Password','Sign in']};
+function openAuth(step,msg){S.sheet=true;var T=AU[step];
+ $('#sh').innerHTML='<div class="grab"></div><h2>'+T[0]+'</h2><div class="s">'+T[1]+'</div><input id="au" style="margin-top:16px" type="'+T[2]+'" inputmode="'+(step=='password'?'text':'tel')+'" autocomplete="'+(step=='code'?'one-time-code':'off')+'" placeholder="'+T[3]+'"><div class="s" id="msg" style="margin-top:12px">'+(msg||'')+'</div><div style="margin-top:16px;display:flex"><button class="btn" data-a="go" data-k="'+step+'" style="flex:1;margin-right:8px">'+T[4]+'</button><button class="btn o" data-a="close">Close</button></div>';
+ $('#ov').style.display='flex';setTimeout(function(){var i=$('#au');if(i)i.focus()},350)}
+function authGo(step){var m=$('#msg'),v=$('#au').value.replace(/^\s+|\s+$/g,'');if(!v){m.textContent='Fill in this field first.';return}
+ if(!window.TGDriver){m.innerHTML='<span class="bd">Phone sign-in needs the TDLib bridge. Read guide.md. Until then, use the bot token.</span>';return}
+ m.textContent='Please wait...';
+ window.TGDriver[step](v).then(function(r){var n=r&&r.next;if(n=='ready'){S.mode='acct';try{localStorage.setItem('tgmode','acct')}catch(e){}closeSheet();toast('Signed in.');hist();run()}else openAuth(n=='pass'?'password':'code')},function(e){m.innerHTML='<span class="bd">'+esc((e&&e.message)||e||'Something went wrong.')+'</span>'})}
+function hist(){var D=window.TGDriver;if(!D||!D.history)return;D.history().then(function(a){var have={};S.items.forEach(function(i){have[i.fp]=1});(a||[]).forEach(function(x){if(have[x.fp])return;var it={fp:x.fp,name:x.name,size:x.size||0,mtime:x.mtime||Date.now(),state:'done',p:1};S.items.push(it);save(it)});paint()},function(){})}
+
+/* events */
+document.addEventListener('click',function(e){var el=e.target;while(el&&el!==document&&!(el.getAttribute&&(el.getAttribute('data-a')||el.id=='sv'||el.id=='fab')))el=el.parentNode;if(!el||el===document)return;
+ if(el.id=='sv')return saveCfg();if(el.id=='fab')return $('#pickA').click();
+ var a=el.getAttribute('data-a'),k=el.getAttribute('data-k');
+ if(a=='tab'){S.tab=k;S.anim=1;if(k!='files'){S.q='';}render();window.scrollTo(0,0)}
+ else if(a=='settings')openSettings();else if(a=='close')closeSheet();
+ else if(a=='pickM')$('#pickM').click();
+ else if(a=='search'){S.tab='files';S.f='all';render();var q=$('#q');if(q)q.focus()}
+ else if(a=='kind'){S.tab='files';S.f=k;render()}
+ else if(a=='transfers'){S.tab='files';S.f='tr';render()}
+ else if(a=='f'){S.f=k;render()}
+ else if(a=='auth')openAuth(k);else if(a=='go')authGo(k);
+ else if(a=='retry'){S.items.forEach(function(it){if(it.state=='fail'&&!it.big){it.state='queued';save(it)}});run()}});
+document.addEventListener('input',function(e){if(e.target.id=='q'){S.q=e.target.value;$('#list').innerHTML=listHtml()}else if(e.target.id=='gl')glass(+e.target.value)});
+$('#ov').addEventListener('click',function(e){if(e.target===this)closeSheet()});
+['pickM','pickA'].forEach(function(id){$('#'+id).addEventListener('change',function(){if(this.files&&this.files.length)add(Array.prototype.slice.call(this.files));this.value=''})});
+document.addEventListener('visibilitychange',function(){if(!document.hidden)run()});
+window.addEventListener('online',run);
+
+/* start: load what is saved, show it, and resume anything that was waiting */
+openDb(function(){loadAll(function(){S.items.forEach(function(it){if(it.state=='up'){it.state='queued'}if(it.state=='fail'&&!it.big&&it.blob)it.state='queued'});
+ S.items.sort(function(a,b){return b.mtime-a.mtime});render();if(S.mode=='acct')hist();if(ready())run();else if(!S.items.length)setTimeout(openSettings,400)})});
+})();
+</script>
+</body>
+</html>

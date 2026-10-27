@@ -16,7 +16,8 @@ window.TGDriver={
  code:function(v){return client.invoke(new L.Api.auth.SignIn({phoneNumber:phone,phoneCodeHash:hash,phoneCode:v})).then(ready,function(e){if(e&&e.errorMessage==="SESSION_PASSWORD_NEEDED")return {next:"pass"};throw e})},
  password:function(v){return client.signInWithPassword({apiId:C.apiId,apiHash:C.apiHash},{password:function(){return Promise.resolve(v)},onError:function(e){throw e}}).then(ready)},
  upload:function(blob,name,cb){return findOrMake().then(function(){return blob.arrayBuffer()}).then(function(buf){
-  return client.sendFile(chat,{file:new L.CustomFile(name,blob.size,"",L.Buffer.from(buf)),forceDocument:true,caption:name+"\n#fp:"+fp(blob),progressCallback:function(p){cb(p)}})}).then(function(m){return m.id})},
+ var fileInfo = {name: name, size: blob.size, lastModified: Date.now()};
+ return client.sendFile(chat,{file:new L.CustomFile(name,blob.size,"",L.Buffer.from(buf)),forceDocument:true,caption:name+"\n#fp:"+fp(fileInfo),progressCallback:function(p){cb(p)}})}).then(function(m){return m.id})},
  history:function(){return boot().then(findOrMake).then(function(){return client.getMessages(chat,{limit:3000})}).then(function(ms){var out=[],i,t;for(i=0;i<ms.length;i++){t=(ms[i].message||"").split("#fp:");if(t.length>1)out.push({fp:t[1].replace(/\s+$/,""),name:ms[i].file&&ms[i].file.name||"file",size:ms[i].file&&ms[i].file.size||0,mtime:(ms[i].date||0)*1000})}return out})}
 };
 /* Already signed in on this device: reconnect quietly. */

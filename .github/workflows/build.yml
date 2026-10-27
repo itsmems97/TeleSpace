@@ -14,7 +14,7 @@ jobs:
         with:
           node-version: 20
       - run: npm install --legacy-peer-deps
-      - run: npx esbuild src/entry.js --bundle --minify --format=iife --platform=browser --define:global=globalThis --outfile=dist/tg-lib.js --external:fs --external:path --external:os --external:net --external:tls
+      - run: npx esbuild src/entry.js --bundle --minify --format=iife --platform=browser --define:global=globalThis --define:process.env.NODE_ENV='"production"' --outfile=dist/tg-lib.js --external:fs --external:net --external:tls --alias:crypto=crypto-browserify --alias:stream=stream-browserify --alias:constants=constants-browserify --alias:path=path-browserify --alias:os=os-browserify --alias:process=process/browser
       - run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"

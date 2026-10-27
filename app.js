@@ -125,7 +125,10 @@ function listHtml(){var q=S.q.toLowerCase(),L=S.items.filter(function(it){
 function files(){
   var F=[['all','All'],['image','Photos'],['video','Videos'],['doc','Documents'],['tr','Transfers'],['deleted','Deleted']];
   let extra = S.selectMode ? '<button class="lnk" style="margin-right:12px" data-a="cancel_select">Cancel</button>' : '<button class="lnk" style="margin-right:12px" data-a="select_mode">Select</button>';
-  return head('Files', extra)+'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search files" value="'+esc(S.q)+'"></div><div class="chips">'+F.map(function(f){return '<button class="chip'+(S.f==f[0]?' on':'')+'" data-a="f" data-k="'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div><div id="list">'+listHtml()+'</div>'
+  
+  // Yahan Cloud Icon hata diya gaya hai (head function use nahi kiya)
+  return '<div class="top"><h1>Files</h1>'+extra+'</div>'
+  +'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search files" value="'+esc(S.q)+'"></div><div class="chips">'+F.map(function(f){return '<button class="chip'+(S.f==f[0]?' on':'')+'" data-a="f" data-k="'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div><div id="list">'+listHtml()+'</div>'
   + (S.selectMode ? '<div style="position:fixed;bottom:100px;left:0;right:0;display:flex;justify-content:center;z-index:10"><button class="btn" data-a="del_selected" style="background:var(--bad);box-shadow:0 4px 12px rgba(255,59,48,0.4)">Delete Selected ('+S.selected.size+')</button></div>' : '')
 }
 
@@ -158,7 +161,7 @@ function paint(){
          }
       });
       if(S._lastCount !== c.n || S._lastState !== c.d) {
-         $('#list').innerHTML = listHtml(); // re-render list safely
+         $('#list').innerHTML = listHtml(); 
          S._lastCount = c.n; S._lastState = c.d;
       }
       live();
@@ -247,6 +250,55 @@ function doDeleteSelected(){
   }
 }
 
+/* Text Confirmation Modals */
+function showConfirm(actionType, title, desc, expectedText, btnText, btnColor) {
+  S.sheet = true;
+  $('#sh').innerHTML = '<div class="grab"></div><h2>'+title+'</h2><div class="s">'+desc+'</div>'+
+  '<div class="s" style="margin-top:15px;font-weight:bold">Type <span style="color:var(--ac);font-family:monospace">'+expectedText+'</span> to confirm:</div>'+
+  '<input id="cfText" type="text" style="margin-top:10px" autocomplete="off">'+
+  '<div style="margin-top:20px;display:flex">'+
+    '<button class="btn" id="cfBtn" style="flex:1;margin-right:8px;background:'+btnColor+'">'+btnText+'</button>'+
+    '<button class="btn o" data-a="close">Cancel</button>'+
+  '</div>';
+  $('#ov').style.display='flex';
+  
+  $('#cfBtn').onclick = function() {
+    let v = $('#cfText').value.trim().toLowerCase();
+    if(v === expectedText.toLowerCase()) {
+       if(actionType === 'safe') logoutAction('safe');
+       if(actionType === 'factory') logoutAction('delete');
+    } else {
+       toast('Incorrect text, try again.');
+    }
+  };
+}
+
+/* Proxy */
+function openProxy() {
+  S.sheet = true;
+  let p = {};
+  try { p = JSON.parse(localStorage.getItem('tgproxy') || '{}'); } catch(e) {}
+  $('#sh').innerHTML = '<div class="grab"></div><h2>Add Proxy</h2><div class="s">Enter your MTProto Proxy details.</div>'+
+  '<label>Server</label><input id="px_ip" value="'+esc(p.ip||'')+'" placeholder="1.2.3.4">'+
+  '<label>Port</label><input id="px_port" type="number" value="'+(p.port||'')+'" placeholder="443">'+
+  '<label>Secret</label><input id="px_sec" value="'+esc(p.secret||'')+'" placeholder="ee...">'+
+  '<div style="margin-top:20px;display:flex">'+
+  '<button class="btn" id="px_save" style="flex:1;margin-right:8px">Save</button>'+
+  '<button class="btn o" data-a="close">Cancel</button></div>';
+  $('#ov').style.display='flex';
+  
+  $('#px_save').onclick = function() {
+    let ip = $('#px_ip').value.trim();
+    let port = $('#px_port').value.trim();
+    let sec = $('#px_sec').value.trim();
+    if(ip && port && sec) {
+      localStorage.setItem('tgproxy', JSON.stringify({ip, port, secret: sec}));
+      toast('Proxy saved. Reloading...');
+      setTimeout(()=>location.reload(), 1000);
+    } else { toast('Please fill all fields'); }
+  };
+}
+
 /* Profile */
 function openProfile(){
   S.sheet=true;
@@ -273,11 +325,11 @@ function openProfile(){
         if(u.photo){
            window.TGDriver.getProfilePic(u.id, u.accessHash, u.photo).then(function(url){
                if(url){
-                   S.profilePic = url; // Save for header
+                   S.profilePic = url; 
                    $('#pImg').src = url;
                    $('#pImg').style.display = 'block';
                    $('#pAv').style.display = 'none';
-                   if(S.tab=='home') render(); // Update header
+                   if(S.tab=='home') render(); 
                }
            }).catch(function(){});
         } else {
@@ -346,12 +398,11 @@ function hist(){
   var D=window.TGDriver;
   if(!D||!D.history)return;
   D.history().then(function(a){
-    if(!a || !a.length) return; // Prevent mass deletion if fetch fails/returns empty
+    if(!a || !a.length) return; 
     var serverFps = new Set(a.map(function(x){return x.fp}));
     var changed=false;
     
     S.items.forEach(function(it){
-       // Only mark as deleted if it was uploaded a while ago (prevents race condition on new files)
        if(it.state=='done' && !serverFps.has(it.fp) && (Date.now() - it.mtime > 5000)){
            it.state='deleted';
            save(it);
@@ -407,15 +458,21 @@ document.addEventListener('click',function(e){
  }
  else if(a=='del_selected'){ doDeleteSelected(); }
  else if(a=='profile') openProfile();
- else if(a=='safe_logout') {
-    $('#sh').innerHTML = '<div class="grab"></div><h2>Safe Logout</h2><div class="s">Your data that you have already backed up will remain in your own private Telespace channel, which you can view at any time using Telegram.</div><div style="margin-top:20px;display:flex"><button class="btn" data-a="do_logout" style="flex:1;margin-right:8px">Logout</button><button class="btn o" data-a="close">Cancel</button></div>';
- }
- else if(a=='do_logout') logoutAction('safe');
+ else if(a=='proxy') openProxy();
+ else if(a=='safe_logout') { showConfirm('safe', 'Safe Logout', 'Your data will remain in Telegram.', 'Logout', 'Logout', 'var(--ac)'); }
  else if(a=='delete_account') {
     $('#sh').innerHTML = '<div class="grab"></div><h2>Delete TeleSpace Account</h2><div class="s">Choose an option:</div><div style="margin-top:20px;display:flex;flex-direction:column;gap:10px"><button class="btn" data-a="factory_delete" style="background:var(--bad)">Factory Delete Backup Data</button><button class="btn o" data-a="do_logout">Keep Safe Data</button><button class="btn o" data-a="close">Cancel</button></div>';
  }
- else if(a=='factory_delete') logoutAction('delete');
- else if(a=='telegram_channel') { window.open('https://t.me/', '_blank'); }
+ else if(a=='factory_delete') showConfirm('factory', 'Factory Delete', 'This will delete local cache permanently.', 'delete', 'Delete', 'var(--bad)');
+ else if(a=='do_logout') showConfirm('safe', 'Keep Safe Data', 'This will log you out but keep your data in Telegram.', 'delete', 'Logout', 'var(--ac)');
+ else if(a=='telegram_channel') { 
+    if(!window.TGDriver || !window.TGDriver.getChannelLink) return toast('Not connected');
+    toast('Opening channel...');
+    window.TGDriver.getChannelLink().then(function(url){
+        if(url) window.open(url, '_blank');
+        else toast('Could not get link');
+    }).catch(function(e){ toast('Error opening channel'); });
+ }
  else if(a=='autosync') { $('#pickDir').click(); }
  else if(a=='retry'){S.items.forEach(function(it){if(it.state=='fail'&&!it.big){it.state='queued';save(it)}});run()}
 });

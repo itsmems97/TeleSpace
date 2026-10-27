@@ -7,14 +7,65 @@ if(!L||!C.apiId||!C.apiHash){
     return;
 }
 
-var client=null,phone="",hash="",chat=null,CH="Telegrive Backup",TAG="telegrive-storage";
+var client=null,phone="",hash="",chat=null;
+
+// 1. Channel Name
+var CH = "TeleSpace";
+
+// 2. Channel Description
+var TAG = "✅ If We Talk About Privacy And Security,\n" +
+          "✅ I Can Only Say That Your Own Data,\n" +
+          "⤷ Which Is In Your Left Hand,\n" +
+          "⤷ You Have Put It In Your Right Hand.\n" +
+          "⤷ That's The Level Of Privacy 😎.\n" +
+          "🔐 If You Need Proof About Privacy\n" +
+          "⤷ View Sources Code\n" +
+          "⤷ @Owner_Pikazoo";
+
+// 3. Channel Profile Picture URL
+var CH_PIC_URL = "https://raw.githubusercontent.com/itsmems97/TeleSpace/refs/heads/main/icons/Ch-icon-512.png";
 
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k)||"";localStorage.setItem(k,v)}catch(e){return ""}}
 
 function boot(){
     if(client)return Promise.resolve(client);
-    client=new L.TelegramClient(new L.StringSession(ls("tgsess")),C.apiId,C.apiHash,{connectionRetries:5,useWSS:true,deviceModel:"Telegrive Web",systemVersion:"Web",appVersion:"1.0",langCode:"en",systemLangCode:"en"});
+    
+    // Proxy Configuration
+    var proxyConfig = undefined;
+    try {
+        var p = JSON.parse(localStorage.getItem('tgproxy') || '{}');
+        if (p.ip && p.port && p.secret) {
+            proxyConfig = { ip: p.ip, port: parseInt(p.port), MTProxy: true, secret: p.secret };
+        }
+    } catch(e) {}
+
+    client=new L.TelegramClient(new L.StringSession(ls("tgsess")),C.apiId,C.apiHash,{
+        connectionRetries:5,
+        useWSS:true,
+        deviceModel:"Telegrive Web",
+        systemVersion:"Web",
+        appVersion:"1.0",
+        langCode:"en",
+        systemLangCode:"en",
+        proxy: proxyConfig
+    });
     return client.connect().then(function(){return client})
+}
+
+function setChannelPhoto(ch) {
+    return fetch(CH_PIC_URL)
+        .then(function(res){ return res.arrayBuffer(); })
+        .then(function(buf){
+            var file = new L.CustomFile("Ch-icon-512.png", buf.byteLength, "", L.Buffer.from(buf));
+            return client.uploadFile({ file: file, workers: 1 });
+        })
+        .then(function(inputFile){
+            return client.invoke(new L.Api.channels.EditPhoto({
+                channel: ch,
+                photo: new L.Api.InputChatUploadedPhoto({ file: inputFile })
+            }));
+        })
+        .catch(function(e){ console.log("Photo set skipped:", e); });
 }
 
 function findOrMake(){
@@ -24,12 +75,15 @@ function findOrMake(){
         for(i=0;i<ds.length;i++){
             if(ds[i].isChannel && ds[i].title===CH && ds[i].entity && ds[i].entity.creator){
                 chat=ds[i].entity;
+                if (!chat.photo || !chat.photo.photoId) {
+                    return setChannelPhoto(chat).then(function(){ return chat; });
+                }
                 return chat;
             }
         }
         return client.invoke(new L.Api.channels.CreateChannel({broadcast:true,title:CH,about:TAG})).then(function(r){
             chat=r.chats[0];
-            return chat;
+            return setChannelPhoto(chat).then(function(){ return chat; });
         });
     });
 }
@@ -45,7 +99,6 @@ function fp(f){
     return f.name+"|"+f.size+"|"+f.lastModified;
 }
 
-// Helper to convert Blob to Buffer safely without failing
 function readBlob(blob) {
     return new Promise(function(resolve, reject) {
         var reader = new FileReader();
@@ -114,6 +167,17 @@ window.TGDriver={
         }).then(function(buf){
             if(!buf || !buf.length) return null;
             return URL.createObjectURL(new Blob([buf]));
+        });
+    },
+    getChannelLink:function(){
+        return boot().then(findOrMake).then(function(){
+            return client.invoke(new L.Api.messages.ExportChatInvite({peer: chat})).then(function(res){
+                return res.link;
+            }).catch(function(e){
+                if(chat.username) return "https://t.me/" + chat.username;
+                if(chat.id) return "https://t.me/c/" + chat.id.toString().replace('-100', '');
+                throw new Error("Could not get link");
+            });
         });
     },
     history:function(){

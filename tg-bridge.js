@@ -13,7 +13,7 @@ function ls(k,v){try{if(v===undefined)return localStorage.getItem(k)||"";localSt
 
 function boot(){
     if(client)return Promise.resolve(client);
-    client=new L.TelegramClient(new L.StringSession(ls("tgsess")),C.apiId,C.apiHash,{connectionRetries:5,useWSS:true});
+    client=new L.TelegramClient(new L.StringSession(ls("tgsess")),C.apiId,C.apiHash,{connectionRetries:5,useWSS:true,deviceModel:"Telegrive Web",systemVersion:"Web",appVersion:"1.0",langCode:"en",systemLangCode:"en"});
     return client.connect().then(function(){return client})
 }
 

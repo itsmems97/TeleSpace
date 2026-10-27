@@ -78,6 +78,28 @@ window.TGDriver={
             });
         }).then(function(m){return m.id});
     },
+    getMedia:function(msgId){
+        return boot().then(findOrMake).then(function(){
+            return client.getMessages(chat, {ids: [msgId]});
+        }).then(function(ms){
+            if(!ms || !ms.length || !ms[0].media) throw new Error("No media found");
+            return client.downloadMedia(ms[0].media, {});
+        });
+    },
+    getMe:function(){
+        return boot().then(function(){
+            return client.getMe();
+        });
+    },
+    getProfilePic:function(userId, accessHash, photo){
+        if(!photo) return Promise.resolve(null);
+        return boot().then(function(){
+            return client.downloadProfilePhoto(new L.Api.InputPeerUser({userId: userId, accessHash: accessHash}), {isBig: false});
+        }).then(function(buf){
+            if(!buf || !buf.length) return null;
+            return URL.createObjectURL(new Blob([buf]));
+        });
+    },
     history:function(){
         return boot().then(findOrMake).then(function(){
             return client.getMessages(chat,{limit:3000});
@@ -90,7 +112,8 @@ window.TGDriver={
                         fp:t[1].replace(/\s+$/,""),
                         name:ms[i].file&&ms[i].file.name||"file",
                         size:ms[i].file&&ms[i].file.size||0,
-                        mtime:(ms[i].date||0)*1000
+                        mtime:(ms[i].date||0)*1000,
+                        msgId: ms[i].id
                     });
                 }
             }

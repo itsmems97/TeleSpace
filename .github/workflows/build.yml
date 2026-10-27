@@ -13,8 +13,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - run: npm install
-      - run: npx esbuild src/entry.js --bundle --minify --format=iife --platform=browser --define:global=globalThis --outfile=dist/tg-lib.js
+      - run: npm install --legacy-peer-deps
+      - run: npx esbuild src/entry.js --bundle --minify --format=iife --platform=browser --define:global=globalThis --outfile=dist/tg-lib.js --external:fs --external:path --external:os --external:net --external:tls --external:crypto
       - run: |
           git config user.name "github-actions"
           git config user.email "actions@github.com"

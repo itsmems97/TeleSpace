@@ -831,7 +831,7 @@ var n={fp:x.fp,name:x.name,size:x.size||0,mtime:x.mtime||Date.now(),state:'done'
 /* ---- session watch, logout, per-account wipe ---- */
 function authErr(e){return /AUTH_KEY|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED/.test(String((e&&(e.errorMessage||e.message))||e||''))}
 function chk(){var D=window.TGDriver;if(!D||!D.check||S.mode!='acct'||document.hidden||!navigator.onLine)return;D.check().catch(function(e){if(authErr(e))forceLogout()})}
-function startWatch(){if(S.wt)return;S.wt=setInterval(chk,60000);chk()}
+function startWatch(){if(S.wt)return;var wn=0;S.wt=setInterval(function(){chk();wn++;if(wn%2===0){scanFolders();run()}},60000);chk()}
 function endSession(){try{localStorage.removeItem('tgsess');localStorage.removeItem('tgmode')}catch(e){}S.mode='';S.active=0;S.metaReady=false;S.metaIds=[]}
 function wipeLocal(){S.items=[];S.folders=[];S.tomb=new Set();S.unlocked=new Set();S.syncFolders=[];S.selected.clear();S.selectMode=false;S.profilePic='';S.profileName='';S.vault=null;S.fdel={};S.rtrash=null;S.metaReady=false;S.metaIds=[];VK=null;S._v='';
  ['f','sync','folders','tomb','meta','vault','prog'].forEach(function(n){try{if(S.db)S.db.transaction(n,'readwrite').objectStore(n).clear()}catch(e){}});try{localStorage.removeItem('tguid')}catch(e){}}

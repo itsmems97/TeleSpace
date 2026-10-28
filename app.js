@@ -57,6 +57,8 @@ function kind(it){var t=it.type||'',e=(it.name.split('.').pop()||'').toLowerCase
 function okType(t,it){var k=kind(it);return t=='photos'?k=='image':t=='videos'?k=='video':t=='audio'?k=='audio':t=='docs'?(k!='image'&&k!='video'&&k!='audio'):true}
 function toast(m){var t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(function(){t.style.display='none'},3600)}
 function ready(){return S.mode=='acct'}
+function inFM(it){var id=it.folder,g=0;while(id&&g++<20){if(id==='filemanager')return true;var f=FLD(id);if(!f)return false;id=f.parent}return false}
+function allOk(it){if(it.state=='trash'||hid(it))return false;if(it.folder&&!inFM(it))return false;var k=kind(it);return S.f=='all'||(S.f=='doc'?(k=='doc'||k=='zip'||k=='app'||k=='other'):k==S.f)}
 function fid(it){return it.fp.replace(/[^a-zA-Z0-9]/g,'')}
 function byFp(fp){return S.items.find(function(x){return x.fp==fp})}
 function FLD(id){return S.folders.find(function(f){return f.id===id})}
@@ -208,7 +210,7 @@ function selBar(){if(!S.selectMode||!S.selected.size)return '';var n=S.selected.
   ?'<button class="btn" data-a="restore_selected" style="background:var(--ac)">Restore ('+n+')</button><button class="btn" data-a="purge_selected" style="background:var(--bad)">Delete forever ('+n+')</button>'
   :'<button class="btn" data-a="dl_selected" style="background:var(--ac)">Download ('+n+')</button><button class="btn" data-a="del_selected" style="background:var(--bad)">Delete ('+n+')</button>')+'</div>'}
 function selBtn(){return S.selectMode?'<button class="lnk" data-a="select_all">All</button><button class="lnk" data-a="cancel_select">Cancel</button>':'<button class="lnk" data-a="select_mode">Select</button>'}
-function navHdr(title,extra){return '<div class="nav-header"><button class="back-btn" data-a="tab" data-k="home"><i class="fa-solid fa-chevron-left"></i> iSpace</button><h2 style="margin-right:0">'+esc(title)+'</h2>'+(extra||'')+'</div>'}
+function navHdr(title,extra,back){back=back||{a:'tab',k:'home',l:'iSpace'};return '<div class="nav-header"><button class="back-btn" data-a="'+back.a+'" data-k="'+esc(back.k)+'"><i class="fa-solid fa-chevron-left"></i> '+esc(back.l)+'</button><h2 style="margin-right:0">'+esc(title)+'</h2>'+(extra||'')+'</div>'}
 function connectCard(){
  return '<div class="storage-card"><div class="storage-header"><div class="cloud-icon-small">'+ic('cloud')+'</div><div class="storage-text"><h2>Connect your Telegram</h2><p>Sign in to start backing up files.</p></div></div><button class="btn" data-a="settings" style="width:100%">Complete Login</button></div>';
 }
@@ -229,7 +231,8 @@ KINDS.forEach(function(K){if (ALLOWED_ROWS.indexOf(K[0]) === -1) return; var b=b
  rows+='<div class="list-row" data-a="kind" data-k="'+K[0]+'"><div class="list-row-left"><div class="icon-wrapper icon-kind-'+K[0]+'">'+ic(ICON[K[0]])+'</div><div class="list-row-text"><h3>'+K[1]+'</h3><p>'+b.n+' '+(b.n==1?K[2]:K[3])+' &middot; '+fmt(b.b)+'</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>'});
  var cnt=function(kk){return S.items.filter(function(x){return x.state=='done'&&!x.folder&&kind(x)==kk}).length};
 var g=greetNow();
- var mine=S.folders.length?'<div class="sec">My folders</div><div class="app-grid">'+S.folders.map(function(f){var t=FT[f.type]||FT.docs,m=S.items.filter(function(x){return x.folder===f.id&&x.state=='done'}).length;
+ var topF=S.folders.filter(function(f){return !f.parent});
+ var mine=topF.length?'<div class="sec">My folders</div><div class="app-grid">'+topF.map(function(f){var t=FT[f.type]||FT.docs,m=S.items.filter(function(x){return x.folder===f.id&&x.state=='done'}).length;
   return '<div class="app-item" data-a="open_folder" data-k="'+esc(f.id)+'"><div class="icon-wrapper '+t.cls+'">'+ic(f.locked?'lock':'folder')+'</div><h3>'+esc(f.name)+'</h3><p>'+(f.locked?'Protected':m+' items')+' &middot; '+t.l+'</p></div>'}).join('')+'</div>':'';
  return '<div class="header"><h1>iSpace</h1><div class="profile-pic" data-a="profile">'+avHtml+'</div></div>'
  +'<div class="storage-card"><div class="storage-header"><div class="cloud-icon-small">'+ic('cloud')+'</div><div class="storage-text"><h2><span id="grT">'+g.t+'</span>'+(S.profileName?',<br>'+esc(S.profileName):'')+'</h2><p id="grW">'+esc(g.w)+'</p></div></div>'
@@ -257,6 +260,7 @@ function listHtml(){
  var q=S.q.toLowerCase(),L=S.items.filter(function(it){
   if(it.state=='trash'||hid(it))return false;
   if(S.tab=='files'){
+      if(it.folder) return false;
       var k = kind(it);
       if(k != 'doc' && k != 'zip' && k != 'app' && k != 'other') return false;
   }
@@ -283,7 +287,7 @@ function browse(c){
  else if(c.grid){var g={},o=[];
   L.forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
   o.forEach(function(m){body+='<div class="sec">'+m+'</div><div class="grid">'+g[m].map(function(it){var isSel=S.selected.has(it.fp);
-   return '<div class="cell '+(isSel?'selected-item':'')+'" data-a="'+(S.selectMode?'select_file':'view')+'" data-fp="'+esc(it.fp)+'">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+')">'+ic(ICON[kind(it)])+'</div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em>'+(it.state=='up'?'<div class="cpb"><i id="pb_'+fid(it)+'" style="width:'+Math.round((it.p||0)*100)+'%"></i></div>':it.state=='queued'?'<div class="cpb"><i style="width:3%"></i></div>':'')+'</div>'}).join('')+'</div>'})}
+   return '<div class="cell '+(isSel?'selected-item':'')+'" data-a="'+(S.selectMode?'select_file':'view')+'" data-fp="'+esc(it.fp)+'">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+');flex-direction:column;gap:6px;padding:4px;text-align:center">'+ic(ICON[kind(it)])+'<span class="cn">'+esc(it.name)+'</span></div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em>'+(it.state=='up'?'<div class="cpb"><i id="pb_'+fid(it)+'" style="width:'+Math.round((it.p||0)*100)+'%"></i></div>':it.state=='queued'?'<div class="cpb"><i style="width:3%"></i></div>':'')+'</div>'}).join('')+'</div>'})}
  else body='<div class="file-list">'+L.map(row).join('')+'</div>';
  return navHdr(c.title,selBtn()+(c.right||''))+(!ready()?connectCard():'')+(c.topHtml||'')+body
 +(ready()?'<div style="margin-top:16px"><button class="btn" data-a="upload_here">'+ic('upload')+'<span style="margin-left:8px">'+c.upload+'</span></button></div>':'')+selBar()}
@@ -331,8 +335,8 @@ else if(t=='all'){
     '<button class="chip'+(S.f=='image'?' on':'')+'" data-a="f" data-k="image">Photos</button>'+
     '<button class="chip'+(S.f=='video'?' on':'')+'" data-a="f" data-k="video">Videos</button>'+
     '<button class="chip'+(S.f=='audio'?' on':'')+'" data-a="f" data-k="audio">Audio</button>'+
-    '<button class="chip'+(S.f=='doc'?' on':'')+'" data-a="f" data-k="doc">Docs</button></div>';
-  v=browse({title:'All',test:function(it){return !it.folder && (S.f=='all'||kind(it)==S.f)},grid:(S.f=='all'||S.f=='image'||S.f=='video')?1:0,empty:'No files backed up yet.',upload:'Choose files',topHtml:chips});
+    '<button class="chip'+(S.f=='doc'?' on':'')+'" data-a="f" data-k="doc">Files</button></div>';
+  v=browse({title:'All',test:allOk,grid:(S.f=='image'||S.f=='video')?1:0,empty:'No files backed up yet.',upload:'Choose files',topHtml:chips});
 }
  else if(t=='videos')v=browse({title:'Videos',test:function(it){return kind(it)=='video'&&!it.folder},grid:1,empty:'No videos backed up yet.',upload:'Choose videos'});
  else if(t=='audio')v=browse({title:'Audio',test:function(it){return kind(it)=='audio'&&!it.folder},empty:'No audio backed up yet.',upload:'Choose audio'});
@@ -352,7 +356,10 @@ else if(t=='folder'){
      }).join('');
      var fiHTML = subFiles.map(row).join('');
 
-     v = navHdr(title, selBtn()) + (!ready()?connectCard():'') +
+     var curF = S.folderId === 'filemanager' ? null : FLD(S.folderId);
+     var back = curF ? (curF.parent === 'filemanager' || !FLD(curF.parent) ? {a:'open_util',k:'filemanager',l:'File Manager'} : {a:'open_folder',k:curF.parent,l:FLD(curF.parent).name}) : {a:'tab',k:'home',l:'iSpace'};
+     var delBtn = curF ? '<button class="ib" style="color:var(--bad);width:32px" data-a="del_folder" aria-label="Delete folder">'+ic('trash')+'</button>' : '';
+     v = navHdr(title, selBtn()+delBtn, back) + (!ready()?connectCard():'') +
          '<div class="sec">Folders</div><div class="app-grid">' + (fHTML || '<div class="s" style="padding:0 4px;">No folders.</div>') + '</div>' +
          '<div class="sec">Files</div><div class="file-list">' + (fiHTML || '<div class="s" style="padding:0 4px;">No files.</div>') + '</div>' + selBar();
  } else if(S.folderId=='notepad'){
@@ -364,9 +371,9 @@ else if(t=='folder'){
 }
  else v=home();
  if(S._v!==v){S._v=v;$('#app').innerHTML=v}if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
- $('#nav').innerHTML=[['home','Home','home'],['files','Drive','folder'],['all','All','images']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
- +'<div data-a="profile" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>More</span></div>';
-var isFM = S.folderId === 'filemanager'; // <-- File Manager check
+ $('#nav').innerHTML=[['home','Home','house','g-home'],['files','Drive','folder','g-drive'],['all','All','layer-group','g-all']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'"><span class="nav-ic '+t[3]+'"><i class="fa-solid fa-'+t[2]+'"></i></span><span>'+t[1]+'</span></div>'}).join('')
+ +'<div data-a="profile" class="nav-item"><span class="nav-ic g-more"><i class="fa-solid fa-ellipsis"></i></span><span>More</span></div>';
+var isFM = S.tab === 'folder' && S.folderId === 'filemanager'; // <-- File Manager check
 var isProtectedFolder = S.tab == 'folder' && FLD(S.folderId) && FLD(S.folderId).locked && !isFM;
 
 document.body.classList.toggle('nonav', isProtectedFolder);
@@ -374,7 +381,9 @@ document.body.classList.toggle('select-mode', S.selectMode);
 
 var fabEl = document.getElementById('fab');
 if(fabEl) {
-    if(S.tab == 'transfers' || S.tab == 'deleted' || isProtectedFolder) {
+    if(isFM || (S.tab=='folder' && FLD(S.folderId) && FLD(S.folderId).parent && !isProtectedFolder)) {
+        fabEl.style.display = 'flex';
+    } else if(S.tab == 'transfers' || S.tab == 'deleted' || isProtectedFolder) {
         fabEl.style.display = 'none';
     } else {
         fabEl.style.display = 'flex';
@@ -407,11 +416,20 @@ function openViewer(it){
  else if((it.state=='done'||it.state=='trash')&&window.TGDriver){
  var k = kind(it);
  if(k == 'video'){
-    var streamUrl = '/ispace-stream/' + it.msgId + '?mime=' + encodeURIComponent(it.type || 'video/mp4');
-    $('#vContent').innerHTML = '<video src="'+streamUrl+'" controls autoplay playsinline id="vVideo"></video>';
-    $('#vDownload').style.display = 'flex';
-    $('#vDownload').href = streamUrl;
-    $('#vDownload').download = it.name;
+    var vm = it.type || (/\.mov$/i.test(it.name)?'video/quicktime':'video/mp4');
+    var streamUrl = new URL('ispace-stream/' + it.msgId + '?mime=' + encodeURIComponent(vm) + '&size=' + (it.size||0), location.href).href;
+    var fullLoad = function(){
+        $('#vContent').innerHTML='<div style="color:#fff">Loading video...</div>';
+        window.TGDriver.getMedia(it.msgId).then(function(buf){showMedia(new Blob([buf],{type:vm}),it.name,vm)})
+        .catch(function(){$('#vContent').innerHTML='<div style="color:#ff3b30">Video load nahi hui. Download try karein.</div>';setDl(it)});
+    };
+    setDl(it);
+    if(navigator.serviceWorker && navigator.serviceWorker.controller){
+        $('#vContent').innerHTML = '<video controls autoplay playsinline preload="metadata" id="vVideo"></video>';
+        var vv = document.getElementById('vVideo'), failed=false;
+        vv.addEventListener('error', function(){ if(failed||!$('#vVideo'))return; failed=true; fullLoad(); });
+        vv.src = streamUrl;
+    } else { fullLoad(); }
 } else {
      window.TGDriver.getMedia(it.msgId).then(function(buf){
       var ext=it.name.split('.').pop().toLowerCase(),mime=it.type||'application/octet-stream';
@@ -423,6 +441,26 @@ function openViewer(it){
 }else $('#vContent').innerHTML='<div style="color:#fff">Preview needs phone sign-in.</div>'
 }
 
+function setDl(it){var d=$('#vDownload');d.style.display='flex';d.removeAttribute('href');d.onclick=function(e){e.preventDefault();toast('Preparing download...');
+  window.TGDriver.getMedia(it.msgId).then(function(buf){var u=URL.createObjectURL(new Blob([buf],{type:it.type||'application/octet-stream'})),a=document.createElement('a');a.href=u;a.download=it.name;document.body.appendChild(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(u)},60000)}).catch(function(){toast('Download failed')})}}
+function mmss(t){if(!isFinite(t))return '0:00';t=Math.floor(t);var m=Math.floor(t/60),x=t%60;return m+':'+(x<10?'0':'')+x}
+function audioPlayer(url,name){
+  $('#vContent').innerHTML='<div class="aplayer"><div class="acover"><i class="fa-solid fa-music"></i></div><div class="atitle">'+esc(name.replace(/\.[^.]+$/,''))+'</div>'
+  +'<input type="range" id="aSeek" min="0" max="1000" value="0"><div class="atimes"><span id="aCur">0:00</span><span id="aDur">0:00</span></div>'
+  +'<div class="actl"><button id="aBack" aria-label="Back 10s"><i class="fa-solid fa-rotate-left"></i><b>10</b></button><button id="aPlay" class="big" aria-label="Play"><i class="fa-solid fa-pause"></i></button><button id="aFwd" aria-label="Forward 10s"><i class="fa-solid fa-rotate-right"></i><b>10</b></button></div>'
+  +'<audio id="aEl" preload="auto" playsinline></audio></div>';
+  var a=document.getElementById('aEl'),sk=document.getElementById('aSeek'),pb=document.getElementById('aPlay'),drag=false;
+  var setP=function(){pb.innerHTML='<i class="fa-solid fa-'+(a.paused?'play':'pause')+'"></i>'};
+  a.addEventListener('timeupdate',function(){if(!drag&&a.duration)sk.value=a.currentTime/a.duration*1000;document.getElementById('aCur').textContent=mmss(a.currentTime)});
+  a.addEventListener('loadedmetadata',function(){document.getElementById('aDur').textContent=mmss(a.duration)});
+  a.addEventListener('play',setP);a.addEventListener('pause',setP);a.addEventListener('ended',setP);
+  sk.addEventListener('input',function(){drag=true;if(a.duration)document.getElementById('aCur').textContent=mmss(sk.value/1000*a.duration)});
+  sk.addEventListener('change',function(){if(a.duration)a.currentTime=sk.value/1000*a.duration;drag=false});
+  pb.addEventListener('click',function(){a.paused?a.play():a.pause()});
+  document.getElementById('aBack').addEventListener('click',function(){a.currentTime=Math.max(0,a.currentTime-10)});
+  document.getElementById('aFwd').addEventListener('click',function(){a.currentTime=Math.min(a.duration||1e9,a.currentTime+10)});
+  a.src=url;var pr=a.play();if(pr&&pr.catch)pr.catch(function(){setP()});setP();
+}
 function showMedia(blob, name, type){
   var url = URL.createObjectURL(blob);
   var ext = name.split('.').pop().toLowerCase();
@@ -435,7 +473,7 @@ var isHtml = ext === 'html';
 
   if(isImg){ $('#vContent').innerHTML = '<img src="'+url+'">'; }
   else if(isVid){ $('#vContent').innerHTML = '<video src="'+url+'" controls autoplay playsinline id="vVideo"></video>'; }
-  else if(isAud){ $('#vContent').innerHTML = '<div style="color:#fff;text-align:center;width:100%;padding:20px;"><div style="font-size:60px;color:var(--ac);margin-bottom:20px;"><i class="fa-solid fa-music"></i></div><audio src="'+url+'" controls autoplay style="width:100%"></audio></div>'; }
+  else if(isAud){ audioPlayer(url,name); }
   else if(isPdf){ $('#vContent').innerHTML = '<iframe src="'+url+'" style="width:100%;height:80vh;border:none;background:#fff;"></iframe>'; }
   else if(isTxt){ blob.text().then(function(txt){ $('#vContent').innerHTML = '<div style="color:#fff;background:rgba(255,255,255,0.1);padding:20px;border-radius:10px;max-height:80vh;overflow:auto;white-space:pre-wrap;font-family:monospace;text-align:left;width:100%;">'+esc(txt)+'</div>'; }); }
 else if(isHtml){ $('#vContent').innerHTML = '<iframe src="'+url+'" style="width:100%;height:80vh;border:none;background:#fff;border-radius:10px;"></iframe>'; }
@@ -446,6 +484,7 @@ else if(isHtml){ $('#vContent').innerHTML = '<iframe src="'+url+'" style="width:
       else if(/^(apk|ipa|xapk)$/.test(ext)) iconCls = 'fa-mobile-screen-button';
       $('#vContent').innerHTML = '<div style="color:#fff;text-align:center;padding:20px;"><div style="font-size:80px;color:var(--tx3);margin-bottom:20px;"><i class="fa-solid '+iconCls+'"></i></div><p style="font-size:18px;font-weight:600;margin-bottom:10px;">Preview after download</p><p style="font-size:14px;opacity:0.7;">'+esc(name)+'</p></div>';
   }
+  $('#vDownload').onclick = null;
   $('#vDownload').href = url;
   $('#vDownload').download = name;
   $('#vDownload').style.display = 'flex';
@@ -528,6 +567,18 @@ function bump(o){o.n=(o.n||0)+1;if(o.n>=5){o.n=0;o.until=Date.now()+30000}}
 function openPlus(){if(!ready())return openSettings();S.sheet=true;var ctx=curCtx(),up=ctx&&ctx.id?'Upload to this folder':ctx?'Upload '+FT[ctx.type].l.toLowerCase():'Upload files';
  $('#sh').innerHTML='<div class="grab"></div><h2>Add</h2><div class="card" style="margin-top:12px"><button class="action-btn" data-a="new_folder">'+ic('fplus')+'<span style="margin-left:12px">New folder</span></button><button class="action-btn" data-a="upload_here" style="border-bottom:0">'+ic('upload')+'<span style="margin-left:12px">'+up+'</span></button></div><button class="btn o" data-a="close" style="width:100%;margin-top:8px">Cancel</button>';
  $('#ov').style.display='flex';document.body.classList.add('sheet-open')}
+function openNewFolder(){
+ var ctx=curCtx(),inFm=S.tab==='folder'&&(S.folderId==='filemanager'||(FLD(S.folderId)&&FLD(S.folderId).parent));
+ S.nf={type:'videos',lock:false};S.sheet=true;
+ var types=inFm?'':'<label>Folder type</label><div class="chips" style="margin:0">'+['photos','videos','audio','docs','notes'].map(function(t){return '<button class="chip'+(S.nf.type==t?' on':'')+'" data-a="ftype" data-k="'+t+'">'+FT[t].l+'</button>'}).join('')+'</div><div class="mt" id="nfHint" style="margin:6px 4px 0"></div>';
+ $('#sh').innerHTML='<div class="grab"></div><h2>New folder</h2><div id="msg" class="s"></div><label>Name</label><input id="nfName" type="text" autocomplete="off" placeholder="Folder name">'+types
+ +'<div class="sw" data-a="tg_lock"><div><div style="font-weight:600">Password protect</div><div class="mt" id="swT">Optional &middot; Disabled</div></div><span class="swk" id="swk"></span></div>'
+ +'<div id="pwBox" style="display:none">'+pwField('nfPw','Password','At least 6 characters')+pwField('nfPw2','Confirm password','Repeat password')+'</div>'
+ +'<div style="margin-top:20px;display:flex"><button class="btn" id="nfGo" style="flex:1;margin-right:8px">Create</button><button class="btn o" data-a="close">Cancel</button></div>';
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');
+ if(!inFm)hint();else S.nf.type='docs';
+ $('#nfGo').onclick=function(){nfCreate()};
+}
 function hint(){var h=$('#nfHint');if(h)h.textContent='Only '+FT[S.nf.type].only+' can be stored in this folder.'}
 async function nfCreate(){var m=$('#msg'),name=$('#nfName').value.trim(),bad=function(t){m.innerHTML='<span class="bd">'+t+'</span>'};
  if(!name)return bad('Enter a folder name.');
@@ -564,7 +615,7 @@ function askDelFolder(){var f=FLD(S.folderId);if(!f)return;S.sheet=true;var n=S.
  +'<div style="margin-top:20px;display:flex"><button class="btn" id="dfBtn" style="flex:1;margin-right:8px;background:var(--bad)">Delete folder</button><button class="btn o" data-a="close">Cancel</button></div>';
  $('#ov').style.display='flex';document.body.classList.add('sheet-open');
 $('#dfBtn').onclick=function(){trashItems(S.items.filter(function(x){return x.folder===f.id}));
-  S.folders=S.folders.filter(function(x){return x.id!==f.id});dbDel('folders',f.id);dbDel('vault',f.id);fdelAdd(f.id);cloudSave();S.unlocked['delete'](f.id);S.tab='home';closeSheet()}}
+  S.folders=S.folders.filter(function(x){return x.id!==f.id});dbDel('folders',f.id);dbDel('vault',f.id);fdelAdd(f.id);cloudSave();S.unlocked['delete'](f.id);if(f.parent&&(f.parent==='filemanager'||FLD(f.parent))){S.tab='folder';S.folderId=f.parent}else S.tab='home';closeSheet()}}
 
 /* ---- Stored Folder Passwords (gated by Google Authenticator / any TOTP app) ---- */
 var VA={};
@@ -884,7 +935,7 @@ if(el.id=='fab'){
 if(el.id=='closeV'){
     $('#ovV').style.display='none';
     var v = document.getElementById('vVideo'); if(v) { v.pause(); v.src = ''; }
-    var a = document.querySelector('#vContent audio'); if(a) { a.pause(); a.src = ''; }
+    var a = document.querySelector('#vContent audio'); if(a) { a.pause(); a.removeAttribute('src'); a.load(); }
     $('#vContent').innerHTML=''; return;
 }
  var a=el.getAttribute('data-a'),k=el.getAttribute('data-k'),fp=el.getAttribute('data-fp'),it=fp?byFp(fp):null;
@@ -911,7 +962,7 @@ if(el.id=='closeV'){
   if(S.selected.size)$('#app').insertAdjacentHTML('beforeend',selBar())}
  else if(a=='select_all'){var vis=S.items.filter(function(x){if(hid(x))return false;if(S.tab=='deleted')return x.state=='trash';if(x.state=='trash')return false;
   if(S.tab=='photos')return kind(x)=='image'&&!x.folder;if(S.tab=='videos')return kind(x)=='video'&&!x.folder;if(S.tab=='audio')return kind(x)=='audio'&&!x.folder;
-  if(S.tab=='folder')return x.folder===S.folderId;var q=S.q.toLowerCase();return S.tab=='files'&&(S.f=='all'||kind(x)==S.f)&&(!q||x.name.toLowerCase().indexOf(q)>-1)});
+  if(S.tab=='all')return allOk(x);if(S.tab=='folder')return x.folder===S.folderId;var q=S.q.toLowerCase();return S.tab=='files'&&(S.f=='all'||kind(x)==S.f)&&(!q||x.name.toLowerCase().indexOf(q)>-1)});
   var all=vis.length&&vis.every(function(x){return S.selected.has(x.fp)});vis.forEach(function(x){if(all)S.selected['delete'](x.fp);else S.selected.add(x.fp)});render()}
  else if(a=='del_selected')trashItems(sel());
  else if(a=='restore_selected')restoreItems(sel());

@@ -406,39 +406,42 @@ function paint(){
   else live()})}
 
 /* Viewer */
+var VT=0;
 function openViewer(it){
  if(it.folder === 'notepad') {
      return openNoteEditor(it); // Edit note logic
  }
  if(it.state!='done'&&it.state!='up'&&it.state!='trash')return toast('File not ready');
+ var my=++VT,alive=function(){return my===VT&&$('#ovV').style.display!='none'};
  $('#vContent').innerHTML='<div style="color:#fff">Loading...</div>';$('#ovV').style.display='flex';$('#vDownload').style.display='none';
- if(it.state=='up'&&it.blob){showMedia(it.blob,it.name,it.type)}
- else if((it.state=='done'||it.state=='trash')&&window.TGDriver){
- var k = kind(it);
- if(k == 'video'){
-    var vm = it.type || (/\.mov$/i.test(it.name)?'video/quicktime':'video/mp4');
-    var streamUrl = new URL('ispace-stream/' + it.msgId + '?mime=' + encodeURIComponent(vm) + '&size=' + (it.size||0), location.href).href;
-    var fullLoad = function(){
-        $('#vContent').innerHTML='<div style="color:#fff">Loading video...</div>';
-        window.TGDriver.getMedia(it.msgId).then(function(buf){showMedia(new Blob([buf],{type:vm}),it.name,vm)})
-        .catch(function(){$('#vContent').innerHTML='<div style="color:#ff3b30">Video load nahi hui. Download try karein.</div>';setDl(it)});
-    };
-    setDl(it);
-    if(navigator.serviceWorker && navigator.serviceWorker.controller){
-        $('#vContent').innerHTML = '<video controls autoplay playsinline preload="metadata" id="vVideo"></video>';
-        var vv = document.getElementById('vVideo'), failed=false;
-        vv.addEventListener('error', function(){ if(failed||!$('#vVideo'))return; failed=true; fullLoad(); });
-        vv.src = streamUrl;
-    } else { fullLoad(); }
-} else {
-     window.TGDriver.getMedia(it.msgId).then(function(buf){
-      var ext=it.name.split('.').pop().toLowerCase(),mime=it.type||'application/octet-stream';
-      if(!mime||mime==='application/octet-stream'){
-       if(['jpg','jpeg','png','gif','webp'].includes(ext))mime='image/'+(ext==='jpg'?'jpeg':ext)}
+ if(it.state=='up'&&it.blob){showMedia(it.blob,it.name,it.type);return}
+ if(!((it.state=='done'||it.state=='trash')&&window.TGDriver)){$('#vContent').innerHTML='<div style="color:#fff">Preview needs phone sign-in.</div>';return}
+ var k=kind(it),ext=it.name.split('.').pop().toLowerCase(),canStream=!!(navigator.serviceWorker&&navigator.serviceWorker.controller);
+ var guess=it.type||(k=='video'?(ext=='mov'?'video/quicktime':'video/mp4'):k=='audio'?(ext=='mp3'?'audio/mpeg':ext=='m4a'?'audio/mp4':'audio/'+ext):'application/octet-stream');
+ var fullLoad=function(){
+    if(!alive())return;
+    $('#vContent').innerHTML='<div style="color:#fff">Loading...</div>';
+    window.TGDriver.getMedia(it.msgId).then(function(buf){
+      if(!alive())return; /* viewer closed meanwhile: do not play */
+      var mime=guess;
+      if(k=='image'&&(!it.type||it.type==='application/octet-stream')&&['jpg','jpeg','png','gif','webp'].indexOf(ext)>-1)mime='image/'+(ext==='jpg'?'jpeg':ext);
       showMedia(new Blob([buf],{type:mime}),it.name,mime)
-     }).catch(function(){$('#vContent').innerHTML='<div style="color:#ff3b30">Error loading file. Try downloading.</div>'});
- }
-}else $('#vContent').innerHTML='<div style="color:#fff">Preview needs phone sign-in.</div>'
+    }).catch(function(){if(alive()){$('#vContent').innerHTML='<div style="color:#ff3b30">Error loading file. Try downloading.</div>';setDl(it)}});
+ };
+ if((k=='video'||k=='audio')&&canStream){
+    var streamUrl=new URL('ispace-stream/'+it.msgId+'?mime='+encodeURIComponent(guess)+'&size='+(it.size||0),location.href).href;
+    setDl(it);
+    if(k=='video'){
+      $('#vContent').innerHTML='<video controls autoplay playsinline preload="metadata" id="vVideo"></video>';
+      var vv=document.getElementById('vVideo'),failed=false;
+      vv.addEventListener('error',function(){if(failed||!alive())return;failed=true;fullLoad()});
+      vv.src=streamUrl;
+    }else{
+      audioPlayer(streamUrl,it.name);
+      var ae=document.getElementById('aEl'),af=false;
+      ae.addEventListener('error',function(){if(af||!alive())return;af=true;fullLoad()});
+    }
+ }else fullLoad();
 }
 
 function setDl(it){var d=$('#vDownload');d.style.display='flex';d.removeAttribute('href');d.onclick=function(e){e.preventDefault();toast('Preparing download...');
@@ -933,6 +936,7 @@ if(el.id=='fab'){
   return openPlus();
 }
 if(el.id=='closeV'){
+    VT++;
     $('#ovV').style.display='none';
     var v = document.getElementById('vVideo'); if(v) { v.pause(); v.src = ''; }
     var a = document.querySelector('#vContent audio'); if(a) { a.pause(); a.removeAttribute('src'); a.load(); }

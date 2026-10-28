@@ -264,7 +264,8 @@ window.TGDriver={
     });
 },
 getChunk:function(msgId,offset,limit){
-    return boot().then(findOrMake).then(function(){return client.getMessages(chat,{ids:[msgId]})}).then(async function(ms){
+    var id = parseInt(msgId, 10);
+    return boot().then(findOrMake).then(function(){return client.getMessages(chat,{ids:[id]})}).then(async function(ms){
         var m=ms[0];if(!m||!m.media)throw new Error("No media");
         var chunks=[];
         for await(var chunk of client.iterDownload({file:m.media,offset:big(offset),requestSize:limit,limit:1})){

@@ -240,7 +240,7 @@ var g=greetNow();
  +'<a href="#" class="manage-storage" data-a="tab" data-k="files">Manage Storage <i class="fa-solid fa-chevron-right"></i></a></div>'
  +extraRows
  +'<div class="app-grid">'
- +tile('tab','photos','icon-photos','photos','All Files',n+' items')
+ +tile('tab','photos','icon-photos','photos','Photos',cnt('image')+' items')
  +tile('tab','videos','icon-kind-video','video','Videos',cnt('video')+' items')
  +tile('tab','audio','icon-kind-audio','audio','Audio',cnt('audio')+' items')
  +tile('open_util','filemanager','icon-kind-doc','folder','File Manager','Folders')
@@ -290,7 +290,13 @@ function browse(c){
 
 function curCtx(){var t=S.tab;
  if(t=='photos')return{type:'photos'};if(t=='videos')return{type:'videos'};if(t=='audio')return{type:'audio'};
- if(t=='folder'){var f=FLD(S.folderId);return f?{id:f.id,type:f.type}:null}return null}
+ if(t=='folder'){
+     if (S.folderId === 'filemanager') return {id: 'filemanager', type: 'generic'};
+     var f=FLD(S.folderId);
+     if(!f) return null;
+     return {id:f.id,type:f.type};
+ }
+ return null}
 
 function trRow(it){
  var id=fid(it),k=kind(it),fp=esc(it.fp),p=Math.round((it.p||0)*100),off=!navigator.onLine,s,act='';
@@ -317,42 +323,48 @@ function render(){
  var t=S.tab,v;
  if(t=='home')v=home();else if(t=='files')v=files();
  else if(t=='photos'){
-   var chips = '<div class="chips" style="margin-top:10px">'+
-     '<button class="chip'+(S.f=='all'?' on':'')+'" data-a="f" data-k="all">All</button>'+
-     '<button class="chip'+(S.f=='image'?' on':'')+'" data-a="f" data-k="image">Photos</button>'+
-     '<button class="chip'+(S.f=='video'?' on':'')+'" data-a="f" data-k="video">Videos</button>'+
-     '<button class="chip'+(S.f=='audio'?' on':'')+'" data-a="f" data-k="audio">Audio</button>'+
-     '<button class="chip'+(S.f=='doc'?' on':'')+'" data-a="f" data-k="doc">Docs</button></div>';
-   v=browse({title:'All',test:function(it){return !it.folder && (S.f=='all'||kind(it)==S.f)},grid:(S.f=='all'||S.f=='image'||S.f=='video')?1:0,empty:'No files backed up yet.',upload:'Choose files',topHtml:chips});
- }
+  v=browse({title:'Photos',test:function(it){return kind(it)=='image'&&!it.folder},grid:1,empty:'No photos backed up yet.',upload:'Choose photos'});
+}
+else if(t=='all'){
+  var chips = '<div class="chips" style="margin-top:10px">'+
+    '<button class="chip'+(S.f=='all'?' on':'')+'" data-a="f" data-k="all">All</button>'+
+    '<button class="chip'+(S.f=='image'?' on':'')+'" data-a="f" data-k="image">Photos</button>'+
+    '<button class="chip'+(S.f=='video'?' on':'')+'" data-a="f" data-k="video">Videos</button>'+
+    '<button class="chip'+(S.f=='audio'?' on':'')+'" data-a="f" data-k="audio">Audio</button>'+
+    '<button class="chip'+(S.f=='doc'?' on':'')+'" data-a="f" data-k="doc">Docs</button></div>';
+  v=browse({title:'All',test:function(it){return !it.folder && (S.f=='all'||kind(it)==S.f)},grid:(S.f=='all'||S.f=='image'||S.f=='video')?1:0,empty:'No files backed up yet.',upload:'Choose files',topHtml:chips});
+}
  else if(t=='videos')v=browse({title:'Videos',test:function(it){return kind(it)=='video'&&!it.folder},grid:1,empty:'No videos backed up yet.',upload:'Choose videos'});
  else if(t=='audio')v=browse({title:'Audio',test:function(it){return kind(it)=='audio'&&!it.folder},empty:'No audio backed up yet.',upload:'Choose audio'});
  else if(t=='transfers')v=transfers();
  else if(t=='deleted')v=navHdr('Deleted',selBtn())+'<div class="s" style="margin:0 4px 12px">These files are still in your Telegram backup. Deleting here removes them from the channel permanently.</div>'
    +(function(){var L=S.items.filter(function(it){return it.state=='trash'&&!hid(it)}).sort(function(a,b){return (b.trashAt||0)-(a.trashAt||0)});return L.length?'<div class="file-list">'+L.map(row).join('')+'</div>':'<div class="empty">No items deleted.</div>'})()+selBar();
- else if(t=='folder'){
-  if(S.folderId=='filemanager'){
-    // File Manager ke andar custom folders aur files dono dikhao
-    var fmFolders = S.folders.map(function(f){
-        var t=FT[f.type]||FT.docs, m=S.items.filter(function(x){return x.folder===f.id&&x.state=='done'}).length;
-        return '<div class="app-item" data-a="open_folder" data-k="'+esc(f.id)+'"><div class="icon-wrapper '+t.cls+'">'+ic(f.locked?'lock':'folder')+'</div><h3>'+esc(f.name)+'</h3><p>'+m+' items</p></div>';
-    }).join('');
-    var fmFiles = S.items.filter(function(it){return it.folder && it.folder!='notepad' && S.folders.every(function(f){return f.id!==it.folder})}).map(row).join('');
-    
-    v = navHdr('File Manager', selBtn()) + (!ready()?connectCard():'') +
-        '<div class="sec">Folders</div><div class="app-grid">' + (fmFolders || '<div class="s" style="padding:0 4px;">No folders yet. Use + to create.</div>') + '</div>' +
-        '<div class="sec">Files</div><div class="file-list">' + (fmFiles || '<div class="s" style="padding:0 4px;">No files here. Use + to upload.</div>') + '</div>' +
-        selBar();
-} else if(S.folderId=='notepad'){
-      v=browse({title:'Notepad',test:function(it){return it.folder=='notepad'},grid:0,empty:'No notes yet. Use + to create a note.',upload:'Create note'});
-  } else {
-      var f=FLD(S.folderId),T=FT[f.type]||FT.docs;
-      v=browse({title:f.name,test:function(it){return it.folder===f.id},grid:T.grid,empty:'Empty. Only '+T.only+' can be stored here.',upload:'Add '+T.l.toLowerCase(),right:'<button class="ib" style="color:var(--bad);width:32px" data-a="del_folder" aria-label="Delete folder">'+ic('trash')+'</button>'})
-  }
+else if(t=='folder'){
+ var isFM = S.folderId === 'filemanager' || (FLD(S.folderId) && FLD(S.folderId).parent);
+ if (isFM) {
+     var subF = S.folders.filter(function(sf){return sf.parent === S.folderId});
+     var subFiles = S.items.filter(function(it){return it.folder === S.folderId && it.state!='trash'});
+     var title = S.folderId === 'filemanager' ? 'File Manager' : FLD(S.folderId).name;
+     
+     var fHTML = subF.map(function(f){
+         var m = S.items.filter(function(x){return x.folder===f.id&&x.state=='done'}).length;
+         return '<div class="app-item" data-a="open_folder" data-k="'+esc(f.id)+'"><div class="icon-wrapper icon-kind-doc">'+ic(f.locked?'lock':'folder')+'</div><h3>'+esc(f.name)+'</h3><p>'+m+' items</p></div>';
+     }).join('');
+     var fiHTML = subFiles.map(row).join('');
+
+     v = navHdr(title, selBtn()) + (!ready()?connectCard():'') +
+         '<div class="sec">Folders</div><div class="app-grid">' + (fHTML || '<div class="s" style="padding:0 4px;">No folders.</div>') + '</div>' +
+         '<div class="sec">Files</div><div class="file-list">' + (fiHTML || '<div class="s" style="padding:0 4px;">No files.</div>') + '</div>' + selBar();
+ } else if(S.folderId=='notepad'){
+     v=browse({title:'Notepad',test:function(it){return it.folder=='notepad'},grid:0,empty:'No notes yet. Use + to create a note.',upload:'Create note'});
+ } else {
+     var f=FLD(S.folderId),T=FT[f.type]||FT.docs;
+     v=browse({title:f.name,test:function(it){return it.folder===f.id},grid:T.grid,empty:'Empty. Only '+T.only+' can be stored here.',upload:'Add '+T.l.toLowerCase(),right:'<button class="ib" style="color:var(--bad);width:32px" data-a="del_folder" aria-label="Delete folder">'+ic('trash')+'</button>'})
  }
+}
  else v=home();
  if(S._v!==v){S._v=v;$('#app').innerHTML=v}if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
- $('#nav').innerHTML=[['home','Home','home'],['files','Drive','folder'],['photos','All','images']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
+ $('#nav').innerHTML=[['home','Home','home'],['files','Drive','folder'],['all','All','images']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
  +'<div data-a="profile" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>More</span></div>';
 var isProtectedFolder = S.tab == 'folder' && FLD(S.folderId) && FLD(S.folderId).locked;
 document.body.classList.toggle('nonav', isProtectedFolder);
@@ -377,6 +389,9 @@ function paint(){
 
 /* Viewer */
 function openViewer(it){
+ if(it.folder === 'notepad') {
+     return openNoteEditor(it); // Edit note logic
+ }
  if(it.state!='done'&&it.state!='up'&&it.state!='trash')return toast('File not ready');
  $('#vContent').innerHTML='<div style="color:#fff">Loading...</div>';$('#ovV').style.display='flex';$('#vDownload').style.display='none';
  if(it.state=='up'&&it.blob){showMedia(it.blob,it.name,it.type)}
@@ -505,20 +520,20 @@ function openPlus(){if(!ready())return openSettings();S.sheet=true;var ctx=curCt
  $('#sh').innerHTML='<div class="grab"></div><h2>Add</h2><div class="card" style="margin-top:12px"><button class="action-btn" data-a="new_folder">'+ic('fplus')+'<span style="margin-left:12px">New folder</span></button><button class="action-btn" data-a="upload_here" style="border-bottom:0">'+ic('upload')+'<span style="margin-left:12px">'+up+'</span></button></div><button class="btn o" data-a="close" style="width:100%;margin-top:8px">Cancel</button>';
  $('#ov').style.display='flex';document.body.classList.add('sheet-open')}
 function hint(){var h=$('#nfHint');if(h)h.textContent='Only '+FT[S.nf.type].only+' can be stored in this folder.'}
-function openNewFolder(){S.sheet=true;S.nf={type:'videos',lock:false};
- $('#sh').innerHTML='<div class="grab"></div><h2>New folder</h2>'
- +'<label>Folder name</label><input id="nfName" maxlength="40" placeholder="e.g. Family videos" autocomplete="off">'
- +'<label>Folder type</label><div class="chips" style="margin:0">'+Object.keys(FT).map(function(k){return '<button class="chip'+(k==S.nf.type?' on':'')+'" data-a="ftype" data-k="'+k+'">'+FT[k].l+'</button>'}).join('')+'</div><div class="s" id="nfHint" style="margin:6px 4px 0"></div>'
- +'<div class="sw" data-a="tg_lock"><div><div style="font-weight:600">Protect folder with password</div><div class="s" id="swT">Optional &middot; Disabled</div></div><i class="swk" id="swk"></i></div>'
- +'<div id="pwBox" style="display:none">'+pwField('nfPw','Password','At least 6 characters')+pwField('nfPw2','Confirm password','Re-enter password')+'</div>'
- +'<div class="s" id="msg" style="margin-top:10px"></div>'
- +'<div style="margin-top:16px;display:flex"><button class="btn" id="nfGo" data-enter="1" style="flex:1;margin-right:8px">Create folder</button><button class="btn o" data-a="close">Cancel</button></div>';
- $('#ov').style.display='flex';document.body.classList.add('sheet-open');hint();
-$('#nfGo').onclick=nfCreate}
 async function nfCreate(){var m=$('#msg'),name=$('#nfName').value.trim(),bad=function(t){m.innerHTML='<span class="bd">'+t+'</span>'};
  if(!name)return bad('Enter a folder name.');
  if(S.folders.some(function(f){return f.name.toLowerCase()==name.toLowerCase()}))return bad('A folder with this name already exists.');
- var f={id:'fd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:name,type:S.nf.type,locked:false,created:Date.now(),u:Date.now()};
+ 
+ var parentId = null;
+ if (S.tab === 'folder') {
+     if (S.folderId === 'filemanager') parentId = 'filemanager';
+     else {
+         var currF = FLD(S.folderId);
+         if (currF && currF.parent) parentId = currF.id;
+     }
+ }
+ var type = parentId ? 'generic' : S.nf.type;
+ var f={id:'fd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:name,type:type,locked:false,created:Date.now(),u:Date.now(),parent:parentId};
  if(S.nf.lock){if(!needCrypto())return;var p1=$('#nfPw').value,p2=$('#nfPw2').value;
   if(p1.length<6)return bad('Password must be at least 6 characters.');
   if(p1!==p2)return bad('Passwords do not match.');
@@ -858,11 +873,11 @@ if(el.id=='fab'){
   }
   if(S.tab=='files'){ S.pickTarget={type:'docs'}; $('#pickA').accept=''; $('#pickA').click(); return; }
   if(S.tab=='folder'){
-      if(S.folderId=='filemanager') return openPlus();
-      if(S.folderId=='notepad') return openNoteEditor();
-      var f=FLD(S.folderId);
-      S.pickTarget=ctx; $('#pickA').accept=FT[f.type]?FT[f.type].acc:''; $('#pickA').click(); return;
-  }
+    var f = FLD(S.folderId);
+    if(S.folderId=='filemanager' || (f && f.parent)) return openPlus(); // File manager me new folder ya upload dono ka option
+    if(S.folderId=='notepad') return openNoteEditor();
+    S.pickTarget=ctx; $('#pickA').accept=FT[f.type]?FT[f.type].acc:''; $('#pickA').click(); return;
+}
   return openPlus();
 }
 if(el.id=='closeV'){
@@ -948,6 +963,7 @@ document.addEventListener('keydown',function(e){if(e.key=='Enter'&&e.target.tagN
 $('#ov').addEventListener('click',function(e){if(e.target===this)closeSheet()});
 ['pickM','pickA','pickDir','pickDir2'].forEach(function(id){
  if($('#'+id))$('#'+id).addEventListener('change',function(){
+  document.body.classList.remove('sheet-open'); // Blur hatane ke liye
   var t=S.pickTarget;S.pickTarget=null;
   if(this.files&&this.files.length)add(Array.prototype.slice.call(this.files),t);
   this.value='';this.accept=id=='pickA'?'':this.accept})});
@@ -958,30 +974,50 @@ document.addEventListener('visibilitychange',function(){
 window.addEventListener('online',function(){S.items.forEach(function(it){if(it.state=='fail'&&it.net&&!it.big){it.state='queued';save(it)}});run();if(S.tab=='transfers')render()});
 window.addEventListener('offline',function(){if(S.tab=='transfers')render()});
 
-function openNoteEditor() {
-    S.sheet = true;
-    $('#sh').innerHTML = '<div class="grab"></div><h2>New Note</h2>' +
-        '<input id="noteTitle" placeholder="Title.html" style="margin-bottom:10px">' +
-        '<div style="background:var(--sf2);border-radius:14px;padding:10px;margin-bottom:10px;display:flex;gap:10px;overflow-x:auto">' +
-            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'bold\', false, null)"><b>B</b></button>' +
-            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'italic\', false, null)"><i>I</i></button>' +
-            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'underline\', false, null)"><u>U</u></button>' +
-            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="var url = prompt(\'Enter link:\'); if(url) document.execCommand(\'createLink\', false, url)">Link</button>' +
-            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'insertUnorderedList\', false, null)">List</button>' +
-        '</div>' +
-        '<div id="noteContent" contenteditable="true" style="width:100%;height:200px;background:var(--sf2);border-radius:14px;padding:16px;color:#fff;outline:none;overflow:auto"></div>' +
-        '<div style="margin-top:16px;display:flex"><button class="btn" id="saveNote" style="flex:1;margin-right:8px">Save to Notepad</button><button class="btn o" data-a="close">Cancel</button></div>';
-    $('#ov').style.display='flex'; document.body.classList.add('sheet-open');
-    $('#saveNote').onclick = function() {
-        var title = $('#noteTitle').value.trim() || 'Note_' + Date.now();
-        if(!title.endsWith('.html') && !title.endsWith('.txt')) title += '.html';
-        var html = $('#noteContent').innerHTML;
-        if(!html || html === '<br>') return toast('Cannot save empty note.');
-        var file = new File([html], title, {type: 'text/html'});
-        S.pickTarget = {id: 'notepad', type: 'notes'};
-        add([file], S.pickTarget);
-        closeSheet();
+function openNoteEditor(existingItem) {
+    var titleVal = existingItem ? existingItem.name : 'Title.html';
+    var showEditor = function(title, content) {
+        S.sheet = true;
+        $('#sh').innerHTML = '<div class="grab"></div><h2>' + (existingItem ? 'Edit Note' : 'New Note') + '</h2>' +
+            '<input id="noteTitle" placeholder="Title.html" value="'+esc(title)+'" style="margin-bottom:10px">' +
+            '<div style="background:var(--sf2);border-radius:14px;padding:10px;margin-bottom:10px;display:flex;gap:10px;overflow-x:auto">' +
+    '<button onmousedown="event.preventDefault()" class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'bold\', false, null)"><b>B</b></button>' +
+    '<button onmousedown="event.preventDefault()" class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'italic\', false, null)"><i>I</i></button>' +
+    '<button onmousedown="event.preventDefault()" class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'underline\', false, null)"><u>U</u></button>' +
+    '<button onmousedown="event.preventDefault()" class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="var url = prompt(\'Enter link:\'); if(url) document.execCommand(\'createLink\', false, url)">Link</button>' +
+    '<button onmousedown="event.preventDefault()" class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'insertUnorderedList\', false, null)">List</button>' +
+'</div>' +
+            '<div id="noteContent" contenteditable="true" style="width:100%;height:200px;background:var(--sf2);border-radius:14px;padding:16px;color:#fff;outline:none;overflow:auto">'+content+'</div>' +
+            '<div style="margin-top:16px;display:flex"><button class="btn" id="saveNote" style="flex:1;margin-right:8px">Save to Notepad</button><button class="btn o" data-a="close">Cancel</button></div>';
+        $('#ov').style.display='flex'; document.body.classList.add('sheet-open');
+        
+        $('#saveNote').onclick = function() {
+            var title = $('#noteTitle').value.trim() || 'Note_' + Date.now();
+            if(!title.endsWith('.html') && !title.endsWith('.txt')) title += '.html';
+            var html = $('#noteContent').innerHTML;
+            if(!html || html === '<br>') return toast('Cannot save empty note.');
+            var file = new File([html], title, {type: 'text/html'});
+            S.pickTarget = {id: 'notepad', type: 'notes'};
+            
+            if (existingItem) {
+                window.TGDriver.deleteMessages([existingItem.msgId]).catch(function(){});
+                dropItem(existingItem, false);
+            }
+            
+            add([file], S.pickTarget);
+            closeSheet();
+        };
     };
+
+    if (existingItem && existingItem.msgId) {
+        toast('Loading note...');
+        window.TGDriver.getMedia(existingItem.msgId).then(function(buf) {
+            var text = new TextDecoder().decode(buf);
+            showEditor(titleVal, text);
+        }).catch(function() { toast('Failed to load note.'); });
+    } else {
+        showEditor(titleVal, '');
+    }
 }
 
 openDb(function(){

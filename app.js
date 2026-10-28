@@ -366,9 +366,12 @@ else if(t=='folder'){
  if(S._v!==v){S._v=v;$('#app').innerHTML=v}if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
  $('#nav').innerHTML=[['home','Home','home'],['files','Drive','folder'],['all','All','images']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
  +'<div data-a="profile" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>More</span></div>';
-var isProtectedFolder = S.tab == 'folder' && FLD(S.folderId) && FLD(S.folderId).locked;
+var isFM = S.folderId === 'filemanager'; // <-- File Manager check
+var isProtectedFolder = S.tab == 'folder' && FLD(S.folderId) && FLD(S.folderId).locked && !isFM;
+
 document.body.classList.toggle('nonav', isProtectedFolder);
 document.body.classList.toggle('select-mode', S.selectMode);
+
 var fabEl = document.getElementById('fab');
 if(fabEl) {
     if(S.tab == 'transfers' || S.tab == 'deleted' || isProtectedFolder) {

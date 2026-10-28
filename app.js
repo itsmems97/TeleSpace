@@ -4,7 +4,10 @@ if('serviceWorker' in navigator) {
             var port = e.ports[0];
             window.TGDriver.getChunk(e.data.msgId, e.data.offset, e.data.limit).then(function(buf) {
                 port.postMessage(buf);
-            }).catch(function() { port.postMessage(new ArrayBuffer(0)); });
+            }).catch(function(err) { 
+                console.error('Stream error:', err);
+                port.postMessage(new ArrayBuffer(0)); 
+            });
         }
     });
 }
@@ -226,10 +229,6 @@ KINDS.forEach(function(K){if (ALLOWED_ROWS.indexOf(K[0]) === -1) return; var b=b
  rows+='<div class="list-row" data-a="kind" data-k="'+K[0]+'"><div class="list-row-left"><div class="icon-wrapper icon-kind-'+K[0]+'">'+ic(ICON[K[0]])+'</div><div class="list-row-text"><h3>'+K[1]+'</h3><p>'+b.n+' '+(b.n==1?K[2]:K[3])+' &middot; '+fmt(b.b)+'</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>'});
  var cnt=function(kk){return S.items.filter(function(x){return x.state=='done'&&!x.folder&&kind(x)==kk}).length};
 var g=greetNow();
-var utilities = '<div class="sec">Utilities</div><div class="app-grid">'
- +'<div class="app-item" data-a="open_util" data-k="filemanager"><div class="icon-wrapper icon-kind-doc">'+ic('folder')+'</div><h3>File Manager</h3><p>Manage folders</p></div>'
- +'<div class="app-item" data-a="open_util" data-k="notepad"><div class="icon-wrapper icon-kind-doc">'+ic('doc')+'</div><h3>Notepad</h3><p>Text files</p></div>'
- +'</div>';
  var mine=S.folders.length?'<div class="sec">My folders</div><div class="app-grid">'+S.folders.map(function(f){var t=FT[f.type]||FT.docs,m=S.items.filter(function(x){return x.folder===f.id&&x.state=='done'}).length;
   return '<div class="app-item" data-a="open_folder" data-k="'+esc(f.id)+'"><div class="icon-wrapper '+t.cls+'">'+ic(f.locked?'lock':'folder')+'</div><h3>'+esc(f.name)+'</h3><p>'+(f.locked?'Protected':m+' items')+' &middot; '+t.l+'</p></div>'}).join('')+'</div>':'';
  return '<div class="header"><h1>iSpace</h1><div class="profile-pic" data-a="profile">'+avHtml+'</div></div>'
@@ -241,21 +240,27 @@ var utilities = '<div class="sec">Utilities</div><div class="app-grid">'
  +'<a href="#" class="manage-storage" data-a="tab" data-k="files">Manage Storage <i class="fa-solid fa-chevron-right"></i></a></div>'
  +extraRows
  +'<div class="app-grid">'
-  +tile('tab','photos','icon-photos','photos','Photos',cnt('image')+' items')
-  +tile('tab','videos','icon-kind-video','video','Videos',cnt('video')+' items')
-  +tile('tab','audio','icon-kind-audio','audio','Audio',cnt('audio')+' items')
-  +tile('tab','files','icon-drive','folder','Drive',n+' items')
-  +tile('tab','transfers','icon-mail','swap','Transfers',(c.n+c.pz)+' active')
-  +tile('autosync','','icon-findmy','sync','Auto-Sync',S.syncFolders.length+' folders')
-  +tile('tab','deleted','icon-trash','trash','Deleted',c.del+' items')
- +'</div>'+utilities+mine
+ +tile('tab','photos','icon-photos','photos','All Files',n+' items')
+ +tile('tab','videos','icon-kind-video','video','Videos',cnt('video')+' items')
+ +tile('tab','audio','icon-kind-audio','audio','Audio',cnt('audio')+' items')
+ +tile('open_util','filemanager','icon-kind-doc','folder','File Manager','Folders')
+ +tile('tab','files','icon-drive','folder','Drive','Documents')
+ +tile('open_util','notepad','icon-kind-doc','doc','Notepad','Notes')
+ +tile('tab','transfers','icon-mail','swap','Transfers',(c.n+c.pz)+' active')
+ +tile('autosync','','icon-findmy','sync','Auto-Sync',S.syncFolders.length+' folders')
+ +tile('tab','deleted','icon-trash','trash','Deleted',c.del+' items')
++'</div>'+mine
  +(n?'<div class="sec">Storage</div>'+rows:'')
 }
 
 function listHtml(){
  var q=S.q.toLowerCase(),L=S.items.filter(function(it){
   if(it.state=='trash'||hid(it))return false;
-  if(S.f!='all'&&kind(it)!=S.f)return false;return !q||it.name.toLowerCase().indexOf(q)>-1});
+  if(S.tab=='files'){
+      var k = kind(it);
+      if(k != 'doc' && k != 'zip' && k != 'app' && k != 'other') return false;
+  }
+  return !q||it.name.toLowerCase().indexOf(q)>-1});
  if(!L.length)return '<div class="empty">'+(q?'No files match search.':'No files here yet.')+'</div>';
  var g={},o=[];
  L.forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
@@ -267,9 +272,8 @@ function listHtml(){
 }
 
 function files(){
- var F=[['all','All'],['image','Photos'],['video','Videos'],['audio','Audio'],['doc','Documents']];
  return navHdr('Drive',selBtn())+(!ready()?connectCard():'')
- +'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search files" value="'+esc(S.q)+'"></div><div class="chips">'+F.map(function(f){return '<button class="chip'+(S.f==f[0]?' on':'')+'" data-a="f" data-k="'+f[0]+'">'+f[1]+'</button>'}).join('')+'</div><div id="list">'+listHtml()+'</div>'+selBar();
+ +'<div class="field">'+ic('search')+'<input id="q" type="search" placeholder="Search documents" value="'+esc(S.q)+'"></div><div id="list">'+listHtml()+'</div>'+selBar();
 }
 
 /* generic folder-like view: built-in Photos/Videos/Audio and custom folders */
@@ -369,12 +373,12 @@ function openViewer(it){
  else if((it.state=='done'||it.state=='trash')&&window.TGDriver){
  var k = kind(it);
  if(k == 'video'){
-     var streamUrl = '/ispace-stream/' + it.msgId;
-     $('#vContent').innerHTML = '<video src="'+streamUrl+'" controls autoplay playsinline id="vVideo"></video>';
-     $('#vDownload').style.display = 'flex';
-     $('#vDownload').href = streamUrl;
-     $('#vDownload').download = it.name;
- } else {
+    var streamUrl = '/ispace-stream/' + it.msgId + '?mime=' + encodeURIComponent(it.type || 'video/mp4');
+    $('#vContent').innerHTML = '<video src="'+streamUrl+'" controls autoplay playsinline id="vVideo"></video>';
+    $('#vDownload').style.display = 'flex';
+    $('#vDownload').href = streamUrl;
+    $('#vDownload').download = it.name;
+} else {
      window.TGDriver.getMedia(it.msgId).then(function(buf){
       var ext=it.name.split('.').pop().toLowerCase(),mime=it.type||'application/octet-stream';
       if(!mime||mime==='application/octet-stream'){
@@ -392,13 +396,15 @@ function showMedia(blob, name, type){
   var isImg = /image/.test(type) || /^(jpe?g|png|gif|webp|heic|heif|bmp)$/.test(ext);
   var isAud = /audio/.test(type) || /^(mp3|m4a|aac|wav|ogg|flac|opus)$/.test(ext);
   var isPdf = ext === 'pdf';
-  var isTxt = /text/.test(type) || /^(txt|csv|md|json|js|css|html)$/.test(ext);
+  var isTxt = /text/.test(type) || /^(txt|csv|md|json|js|css)$/.test(ext);
+var isHtml = ext === 'html';
 
   if(isImg){ $('#vContent').innerHTML = '<img src="'+url+'">'; }
   else if(isVid){ $('#vContent').innerHTML = '<video src="'+url+'" controls autoplay playsinline id="vVideo"></video>'; }
   else if(isAud){ $('#vContent').innerHTML = '<div style="color:#fff;text-align:center;width:100%;padding:20px;"><div style="font-size:60px;color:var(--ac);margin-bottom:20px;"><i class="fa-solid fa-music"></i></div><audio src="'+url+'" controls autoplay style="width:100%"></audio></div>'; }
   else if(isPdf){ $('#vContent').innerHTML = '<iframe src="'+url+'" style="width:100%;height:80vh;border:none;background:#fff;"></iframe>'; }
   else if(isTxt){ blob.text().then(function(txt){ $('#vContent').innerHTML = '<div style="color:#fff;background:rgba(255,255,255,0.1);padding:20px;border-radius:10px;max-height:80vh;overflow:auto;white-space:pre-wrap;font-family:monospace;text-align:left;width:100%;">'+esc(txt)+'</div>'; }); }
+else if(isHtml){ $('#vContent').innerHTML = '<iframe src="'+url+'" style="width:100%;height:80vh;border:none;background:#fff;border-radius:10px;"></iframe>'; }
   else {
       var iconCls = 'fa-file';
       if(/^(zip|rar|7z|tar|gz)$/.test(ext)) iconCls = 'fa-file-zipper';
@@ -781,6 +787,7 @@ var shY = 0, shStart = 0, shDrag = false;
 document.addEventListener('touchstart', function(e) {
     var grab = e.target.closest('.grab');
     if (!grab) return;
+    grab.classList.add('active');
     shDrag = true;
     shStart = e.touches[0].clientY;
     var sh = document.getElementById('sh');
@@ -796,6 +803,8 @@ document.addEventListener('touchmove', function(e) {
     e.preventDefault();
 }, {passive: false});
 document.addEventListener('touchend', function(e) {
+    var grab = document.querySelector('.grab.active');
+    if (grab) grab.classList.remove('active');
     if (!shDrag) return;
     shDrag = false;
     var sh = document.getElementById('sh');
@@ -898,9 +907,9 @@ if(el.id=='closeV'){
 else if(a=='open_util') { S.tab='folder'; S.folderId=k; S.anim=1; render(); window.scrollTo(0,0); }
  else if(a=='del_folder')askDelFolder();
  else if(a=='upload_here'){
-    if(S.sheet){S.sheet=false;$('#ov').style.display='none'}
+    if(S.sheet){S.sheet=false;$('#ov').style.display='none';document.body.classList.remove('sheet-open')}
     var ctx=curCtx();
-    if(S.tab=='folder' && S.folderId=='notepad') return openNoteEditor(); // Notepad ke liye fix
+    if(S.tab=='folder' && S.folderId=='notepad') return openNoteEditor();
     S.pickTarget=ctx;$('#pickA').accept=ctx&&FT[ctx.type]?FT[ctx.type].acc:'';$('#pickA').click()
 }
  /* vault */
@@ -941,14 +950,24 @@ window.addEventListener('offline',function(){if(S.tab=='transfers')render()});
 
 function openNoteEditor() {
     S.sheet = true;
-    $('#sh').innerHTML = '<div class="grab"></div><h2>New Note</h2><input id="noteTitle" placeholder="Title.txt" style="margin-bottom:10px"><textarea id="noteContent" placeholder="Write here..." style="width:100%;height:200px;background:var(--sf2);border:none;border-radius:14px;padding:16px;color:#fff;font-family:monospace;outline:none;resize:none"></textarea><div style="margin-top:16px;display:flex"><button class="btn" id="saveNote" style="flex:1;margin-right:8px">Save to Notepad</button><button class="btn o" data-a="close">Cancel</button></div>';
+    $('#sh').innerHTML = '<div class="grab"></div><h2>New Note</h2>' +
+        '<input id="noteTitle" placeholder="Title.html" style="margin-bottom:10px">' +
+        '<div style="background:var(--sf2);border-radius:14px;padding:10px;margin-bottom:10px;display:flex;gap:10px;overflow-x:auto">' +
+            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'bold\', false, null)"><b>B</b></button>' +
+            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'italic\', false, null)"><i>I</i></button>' +
+            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'underline\', false, null)"><u>U</u></button>' +
+            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="var url = prompt(\'Enter link:\'); if(url) document.execCommand(\'createLink\', false, url)">Link</button>' +
+            '<button class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'insertUnorderedList\', false, null)">List</button>' +
+        '</div>' +
+        '<div id="noteContent" contenteditable="true" style="width:100%;height:200px;background:var(--sf2);border-radius:14px;padding:16px;color:#fff;outline:none;overflow:auto"></div>' +
+        '<div style="margin-top:16px;display:flex"><button class="btn" id="saveNote" style="flex:1;margin-right:8px">Save to Notepad</button><button class="btn o" data-a="close">Cancel</button></div>';
     $('#ov').style.display='flex'; document.body.classList.add('sheet-open');
     $('#saveNote').onclick = function() {
         var title = $('#noteTitle').value.trim() || 'Note_' + Date.now();
-        if(!title.endsWith('.txt')) title += '.txt';
-        var text = $('#noteContent').value;
-        if(!text) return toast('Cannot save empty note.');
-        var file = new File([text], title, {type: 'text/plain'});
+        if(!title.endsWith('.html') && !title.endsWith('.txt')) title += '.html';
+        var html = $('#noteContent').innerHTML;
+        if(!html || html === '<br>') return toast('Cannot save empty note.');
+        var file = new File([html], title, {type: 'text/html'});
         S.pickTarget = {id: 'notepad', type: 'notes'};
         add([file], S.pickTarget);
         closeSheet();

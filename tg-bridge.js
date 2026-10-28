@@ -270,7 +270,8 @@ getChunk:function(msgId,offset,limit){
         for await(var chunk of client.iterDownload({file:m.media,offset:big(offset),requestSize:limit,limit:1})){
             chunks.push(chunk);
         }
-        return L.Buffer.concat(chunks);
+        var buf = L.Buffer.concat(chunks);
+        return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength); // Fix for ArrayBuffer
     });
 },
     getMe:function(){ return boot().then(()=>client.getMe()); },

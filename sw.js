@@ -1,5 +1,5 @@
 /* Offline shell. Change V each time you update files so phones fetch the new ones. */
-var V="ispace-v30",SHELL=["./","index.html","land.html","styles.css","app.js","config.js","tg-bridge.js","pwa.js","dist/tg-lib.js","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-192.png","icons/icon-maskable-512.png"];
+var V="ispace-v31",SHELL=["./","index.html","land.html","styles.css","app.js","config.js","tg-bridge.js","pwa.js","dist/tg-lib.js","manifest.webmanifest","icons/icon-192.png","icons/icon-512.png","icons/icon-maskable-192.png","icons/icon-maskable-512.png"];
 self.addEventListener("install",function(e){e.waitUntil(caches.open(V).then(function(c){return Promise.all(SHELL.map(function(u){return c.add(u).catch(function(){})}))}).then(function(){return self.skipWaiting()}))});
 self.addEventListener("activate",function(e){e.waitUntil(caches.keys().then(function(k){return Promise.all(k.filter(function(n){return n!==V}).map(function(n){return caches.delete(n)}))}).then(function(){return self.clients.claim()}))});
 self.addEventListener("fetch",function(e){

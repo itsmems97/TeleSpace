@@ -332,8 +332,18 @@ function render(){
    +(function(){var L=S.items.filter(function(it){return it.state=='trash'&&!hid(it)}).sort(function(a,b){return (b.trashAt||0)-(a.trashAt||0)});return L.length?'<div class="file-list">'+L.map(row).join('')+'</div>':'<div class="empty">No items deleted.</div>'})()+selBar();
  else if(t=='folder'){
   if(S.folderId=='filemanager'){
-      v=browse({title:'File Manager',test:function(it){return it.folder && it.folder!='notepad'},grid:0,empty:'No custom files yet. Use + to create folders or upload.',upload:'Upload files'});
-  } else if(S.folderId=='notepad'){
+    // File Manager ke andar custom folders aur files dono dikhao
+    var fmFolders = S.folders.map(function(f){
+        var t=FT[f.type]||FT.docs, m=S.items.filter(function(x){return x.folder===f.id&&x.state=='done'}).length;
+        return '<div class="app-item" data-a="open_folder" data-k="'+esc(f.id)+'"><div class="icon-wrapper '+t.cls+'">'+ic(f.locked?'lock':'folder')+'</div><h3>'+esc(f.name)+'</h3><p>'+m+' items</p></div>';
+    }).join('');
+    var fmFiles = S.items.filter(function(it){return it.folder && it.folder!='notepad' && S.folders.every(function(f){return f.id!==it.folder})}).map(row).join('');
+    
+    v = navHdr('File Manager', selBtn()) + (!ready()?connectCard():'') +
+        '<div class="sec">Folders</div><div class="app-grid">' + (fmFolders || '<div class="s" style="padding:0 4px;">No folders yet. Use + to create.</div>') + '</div>' +
+        '<div class="sec">Files</div><div class="file-list">' + (fmFiles || '<div class="s" style="padding:0 4px;">No files here. Use + to upload.</div>') + '</div>' +
+        selBar();
+} else if(S.folderId=='notepad'){
       v=browse({title:'Notepad',test:function(it){return it.folder=='notepad'},grid:0,empty:'No notes yet. Use + to create a note.',upload:'Create note'});
   } else {
       var f=FLD(S.folderId),T=FT[f.type]||FT.docs;

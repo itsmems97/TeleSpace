@@ -370,7 +370,13 @@ var isProtectedFolder = S.tab == 'folder' && FLD(S.folderId) && FLD(S.folderId).
 document.body.classList.toggle('nonav', isProtectedFolder);
 document.body.classList.toggle('select-mode', S.selectMode);
 var fabEl = document.getElementById('fab');
-if(fabEl) fabEl.style.display = (S.tab=='transfers'||S.tab=='deleted')?'none':'flex';
+if(fabEl) {
+    if(S.tab == 'transfers' || S.tab == 'deleted' || isProtectedFolder) {
+        fabEl.style.display = 'none';
+    } else {
+        fabEl.style.display = 'flex';
+    }
+}
 live()}
 function live(){var c=counts(),b=$('#live');if(!c.n||!ready()){b.style.display='none';return}
  var pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);b.style.display='block';$('#liveT').textContent='Uploading '+c.n+' item'+(c.n>1?'s':'')+' \u00B7 '+pct+'%';$('#liveB').style.width=pct+'%'}
@@ -969,11 +975,11 @@ window.addEventListener('online',function(){S.items.forEach(function(it){if(it.s
 window.addEventListener('offline',function(){if(S.tab=='transfers')render()});
 
 function openNoteEditor(existingItem) {
-    var titleVal = existingItem ? existingItem.name : 'Title.html';
+    var titleVal = existingItem ? existingItem.name : ''; // <-- Title.html hataya
     var showEditor = function(title, content) {
         S.sheet = true;
         $('#sh').innerHTML = '<div class="grab"></div><h2>' + (existingItem ? 'Edit Note' : 'New Note') + '</h2>' +
-            '<input id="noteTitle" placeholder="Title.html" value="'+esc(title)+'" style="margin-bottom:10px">' +
+            '<input id="noteTitle" placeholder="Enter note title..." value="'+esc(title)+'" style="margin-bottom:10px">' + // <-- Placeholder change kiya
             '<div style="background:var(--sf2);border-radius:14px;padding:10px;margin-bottom:10px;display:flex;gap:10px;overflow-x:auto">' +
     '<button onmousedown="event.preventDefault()" class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'bold\', false, null)"><b>B</b></button>' +
     '<button onmousedown="event.preventDefault()" class="btn o" style="padding:0 10px;height:32px;font-size:12px" onclick="document.execCommand(\'italic\', false, null)"><i>I</i></button>' +
@@ -1010,7 +1016,7 @@ function openNoteEditor(existingItem) {
             showEditor(titleVal, text);
         }).catch(function() { toast('Failed to load note.'); });
     } else {
-        showEditor(titleVal, '');
+        showEditor(titleVal, ''); // <-- Empty string
     }
 }
 

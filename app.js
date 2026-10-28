@@ -378,6 +378,7 @@ var isProtectedFolder = !!(S.tab == 'folder' && !isFM && FLD(S.folderId) && FLD(
 
 document.body.classList.toggle('nonav', !!isProtectedFolder);
 document.body.classList.toggle('select-mode', !!S.selectMode);
+document.body.classList.toggle('landing', !ready() && S.tab=='home');
 
 var fabEl = document.getElementById('fab');
 if(fabEl) {
@@ -913,6 +914,7 @@ document.addEventListener('touchend', function(e) {
  document.addEventListener('touchmove',function(e){if(e.touches.length>1){e.preventDefault();return}if(t&&(Math.abs(e.touches[0].clientX-sx)>10||Math.abs(e.touches[0].clientY-sy)>10)){clearTimeout(t);t=null}},{passive:false});
  ['touchend','touchcancel'].forEach(function(n){document.addEventListener(n,function(){clearTimeout(t);t=null},{passive:true})});
  document.addEventListener('click',function(e){if(S.lp&&Date.now()-S.lp<700){e.stopPropagation();e.preventDefault();S.lp=0}},true);
+  window.addEventListener('message',function(e){var f=document.getElementById('land');if(f&&e.source===f.contentWindow&&e.data==='ispace-signin')openAuth('phone')});
  document.addEventListener('contextmenu',function(e){if(!/^(INPUT|TEXTAREA)$/.test(e.target.tagName))e.preventDefault()});
  ['gesturestart','gesturechange','gestureend'].forEach(function(n){document.addEventListener(n,function(e){e.preventDefault()},{passive:false})});
 })();

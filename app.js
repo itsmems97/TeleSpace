@@ -25,7 +25,7 @@ var GR={
  evening:{t:'Good evening',w:['Hope you had a wonderful day.','Time to slow down and unwind.','Wishing you a calm and peaceful evening.'],q:['Rest is part of the work.','Be proud of what you finished today.','Every sunset is an opportunity to reset.']},
  night:{t:'Good night',w:['Sleep well and recharge.','Wishing you a restful night.','Time to rest. Tomorrow is a fresh start.'],q:['Tomorrow is a new page.','Sleep is the best meditation.','Dream big, rest well.']}
 };
-function greetNow(){var d=new Date(),h=d.getHours(),P=['morning','afternoon','evening','night'],p=h>=5&&h<12?'morning':h<17?'afternoon':h<21?'evening':'night',g=GR[p],
+function greetNow(){var d=new Date(),h=d.getHours(),P=['morning','afternoon','evening','night'],p=h>=5&&h<12?'morning':h>=12&&h<17?'afternoon':h>=17&&h<21?'evening':'night',g=GR[p],
  day=Math.floor((d.getTime()-d.getTimezoneOffset()*60000)/864e5),wd=d.getDay(),w=g.w[day%g.w.length];
  if(p!='night'){if(wd==5)w='Happy Friday! Enjoy the day ahead.';else if(wd==6||wd==0)w='Have a relaxing weekend.'}
  return{t:g.t,w:w,q:'\u201C'+g.q[(day+P.indexOf(p))%g.q.length]+'\u201D'}}
@@ -43,7 +43,7 @@ function kind(it){var t=it.type||'',e=(it.name.split('.').pop()||'').toLowerCase
  if(/^(apk|ipa|xapk)$/.test(e))return 'app';return 'other'}
 function okType(t,it){var k=kind(it);return t=='photos'?k=='image':t=='videos'?k=='video':t=='audio'?k=='audio':t=='docs'?(k!='image'&&k!='video'&&k!='audio'):true}
 function toast(m){var t=$('#toast');t.textContent=m;t.style.display='block';clearTimeout(toast.h);toast.h=setTimeout(function(){t.style.display='none'},3600)}
-function ready(){return S.mode=='acct'||!!(S.cfg.token&&S.cfg.chat)}
+function ready(){return S.mode=='acct'}
 function fid(it){return it.fp.replace(/[^a-zA-Z0-9]/g,'')}
 function byFp(fp){return S.items.find(function(x){return x.fp==fp})}
 function FLD(id){return S.folders.find(function(f){return f.id===id})}
@@ -98,7 +98,7 @@ function send(it,done){
  x.onerror=function(){fail(it,'No connection.',done)};
  x.send(fd)
 }
-function fail(it,m,done){it.state='fail';it.err=m;it.net=/connection|network|timeout|disconnect|offline|ECONN|fetch|closed/i.test(m);save(it);done()}
+function fail(it,m,done){if(authErr(m))forceLogout();it.state='fail';it.err=m;it.net=/connection|network|timeout|disconnect|offline|ECONN|fetch|closed/i.test(m);save(it);done()}
 function run(){if(!ready())return;
  while(S.active<2){var it=null,i;for(i=0;i<S.items.length;i++){if(S.items[i].state=='queued'){it=S.items[i];break}}
   if(!it)break;
@@ -191,10 +191,10 @@ function selBar(){if(!S.selectMode||!S.selected.size)return '';var n=S.selected.
  return '<div id="sel-bar">'+(S.tab=='deleted'
   ?'<button class="btn" data-a="restore_selected" style="background:var(--ac)">Restore ('+n+')</button><button class="btn" data-a="purge_selected" style="background:var(--bad)">Delete forever ('+n+')</button>'
   :'<button class="btn" data-a="dl_selected" style="background:var(--ac)">Download ('+n+')</button><button class="btn" data-a="del_selected" style="background:var(--bad)">Delete ('+n+')</button>')+'</div>'}
-function selBtn(){return S.selectMode?'<button class="lnk" data-a="cancel_select">Cancel</button>':'<button class="lnk" data-a="select_mode">Select</button>'}
+function selBtn(){return S.selectMode?'<button class="lnk" data-a="select_all">All</button><button class="lnk" data-a="cancel_select">Cancel</button>':'<button class="lnk" data-a="select_mode">Select</button>'}
 function navHdr(title,extra){return '<div class="nav-header"><button class="back-btn" data-a="tab" data-k="home"><i class="fa-solid fa-chevron-left"></i> iSpace</button><h2 style="margin-right:0">'+esc(title)+'</h2>'+(extra||'')+'</div>'}
 function connectCard(){
- return '<div class="storage-card"><div class="storage-header"><div class="cloud-icon-small">'+ic('cloud')+'</div><div class="storage-text"><h2>Connect your Telegram</h2><p>Sign in to start backing up files.</p></div></div><button class="btn" data-a="settings" style="width:100%">Set up</button></div>';
+ return '<div class="storage-card"><div class="storage-header"><div class="cloud-icon-small">'+ic('cloud')+'</div><div class="storage-text"><h2>Connect your Telegram</h2><p>Sign in to start backing up files.</p></div></div><button class="btn" data-a="settings" style="width:100%">Complete Login</button></div>';
 }
 function tile(a,k,cls,icon,name,sub){return '<div class="app-item" data-a="'+a+'" data-k="'+k+'"><div class="icon-wrapper '+cls+'">'+ic(icon)+'</div><h3>'+esc(name)+'</h3><p>'+sub+'</p></div>'}
 
@@ -252,7 +252,7 @@ function browse(c){
  else if(c.grid){var g={},o=[];
   L.forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
   o.forEach(function(m){body+='<div class="sec">'+m+'</div><div class="grid">'+g[m].map(function(it){var isSel=S.selected.has(it.fp);
-   return '<div class="cell '+(isSel?'selected-item':'')+'" data-a="'+(S.selectMode?'select_file':'view')+'" data-fp="'+esc(it.fp)+'">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+')">'+ic(ICON[kind(it)])+'</div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em></div>'}).join('')+'</div>'})}
+   return '<div class="cell '+(isSel?'selected-item':'')+'" data-a="'+(S.selectMode?'select_file':'view')+'" data-fp="'+esc(it.fp)+'">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+')">'+ic(ICON[kind(it)])+'</div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em>'+(it.state=='up'?'<div class="cpb"><i id="pb_'+fid(it)+'" style="width:'+Math.round((it.p||0)*100)+'%"></i></div>':it.state=='queued'?'<div class="cpb"><i style="width:3%"></i></div>':'')+'</div>'}).join('')+'</div>'})}
  else body='<div class="file-list">'+L.map(row).join('')+'</div>';
  return navHdr(c.title,selBtn()+(c.right||''))+(!ready()?connectCard():'')+body
  +(ready()?'<div style="margin-top:16px"><button class="btn" data-a="upload_here">'+ic('upload')+'<span style="margin-left:8px">'+c.upload+'</span></button></div>':'')+selBar()}
@@ -281,6 +281,7 @@ function transfers(){
  +(L.length?'<div class="file-list">'+L.map(trRow).join('')+'</div>':'<div class="empty">No transfers running.</div>')}
 
 function render(){
+ if(!ready())S.tab='home';
  if(S.tab=='folder'){var ff=FLD(S.folderId);if(!ff||(ff.locked&&!S.unlocked.has(ff.id)))S.tab='home'}
  var t=S.tab,v;
  if(t=='home')v=home();else if(t=='files')v=files();
@@ -293,7 +294,7 @@ function render(){
  else if(t=='folder'){var f=FLD(S.folderId),T=FT[f.type]||FT.docs;
   v=browse({title:f.name,test:function(it){return it.folder===f.id},grid:T.grid,empty:'Empty. Only '+T.only+' can be stored here.',upload:'Add '+T.l.toLowerCase(),right:'<button class="ib" style="color:var(--bad);width:32px" data-a="del_folder" aria-label="Delete folder">'+ic('trash')+'</button>'})}
  else v=home();
- $('#app').innerHTML=v;if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
+ if(S._v!==v){S._v=v;$('#app').innerHTML=v}if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
  $('#nav').innerHTML=[['home','Home','home'],['files','Drive','folder'],['photos','Photos','photos']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
   +'<div data-a="profile" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>More</span></div>';
  live()}
@@ -378,17 +379,17 @@ function trashItems(list){var n=0;
   if(it.state=='done'&&it.msgId){it.state='trash';it.trashAt=Date.now();save(it);n++}
   else if(it.state=='up'){var r=rt(it.fp);r.stop='cancel';if(r.xhr)r.xhr.abort()}
   else if(it.state!='trash')dropItem(it,true)});
- S.selected.clear();S.selectMode=false;toast(n?n+' moved to Deleted. Still in Telegram until you delete it there.':'Transfer cancelled');render()}
+ S.selected.clear();S.selectMode=false;cloudSave();toast(n?n+' moved to Deleted. Still in Telegram until you delete it there.':'Transfer cancelled');render()}
 function restoreItems(list){var n=0;
  list.forEach(function(it){if(it.state!='trash')return;it.state='done';delete it.trashAt;if(it.folder&&!FLD(it.folder))delete it.folder;save(it);n++});
- S.selected.clear();S.selectMode=false;toast(n+' restored');render()}
+ S.selected.clear();S.selectMode=false;cloudSave();toast(n+' restored');render()}
 function remoteDelete(ids){
  if(!ids.length)return Promise.resolve();
  if(S.mode=='acct'&&window.TGDriver)return window.TGDriver.deleteMessages(ids);
  return Promise.all(ids.map(function(id){return fetch('https://api.telegram.org/bot'+S.cfg.token+'/deleteMessage?chat_id='+encodeURIComponent(S.cfg.chat)+'&message_id='+id).then(function(r){return r.json()}).then(function(j){if(!j.ok&&!/not found/i.test(j.description||''))throw new Error(j.description||'delete failed')})}))}
 function purge(list){
  return remoteDelete(list.map(function(x){return x.msgId}).filter(Boolean)).then(function(){
-  list.forEach(function(it){dropItem(it,true)});S.selected.clear();S.selectMode=false;toast(list.length+' deleted permanently')},
+  list.forEach(function(it){dropItem(it,true)});cloudSave();S.selected.clear();S.selectMode=false;toast(list.length+' deleted permanently')},
   function(e){toast('Could not delete from Telegram. Check your connection and try again.');throw e})}
 function askPurge(list){
  if(!list.length)return;S.sheet=true;
@@ -403,7 +404,7 @@ function needCrypto(){if(window.crypto&&crypto.subtle)return true;toast('Passwor
 var enc8=function(s){return new TextEncoder().encode(s)};
 async function pwHash(pw,salt){var k=await crypto.subtle.importKey('raw',enc8(pw),'PBKDF2',false,['deriveBits']);return new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',salt:salt,iterations:150000,hash:'SHA-256'},k,256))}
 function same(a,b){if(!a||!b||a.length!=b.length)return false;var d=0;for(var i=0;i<a.length;i++)d|=a[i]^b[i];return d===0}
-async function vkey(){var r=await dbGet('meta','vk');if(r&&r.key)return r.key;var k=await crypto.subtle.generateKey({name:'AES-GCM',length:256},false,['encrypt','decrypt']);await dbPut('meta',{k:'vk',key:k});return k}
+var VK=null;async function vkey(){if(VK)return VK;var r=await dbGet('meta','vkraw'),raw;if(r&&r.b)raw=unb64(r.b);else{raw=crypto.getRandomValues(new Uint8Array(32));await dbPut('meta',{k:'vkraw',b:b64(raw)});cloudSave()}VK=await crypto.subtle.importKey('raw',raw,'AES-GCM',false,['encrypt','decrypt']);return VK}
 async function vaultPut(id,pw){var k=await vkey(),iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},k,enc8(pw));await dbPut('vault',{id:id,iv:iv,ct:new Uint8Array(ct)})}
 async function vaultGet(id){var r=await dbGet('vault',id);if(!r)return null;try{return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:r.iv},await vkey(),r.ct))}catch(e){return null}}
 var B32='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
@@ -437,12 +438,12 @@ function openNewFolder(){S.sheet=true;S.nf={type:'videos',lock:false};
 async function nfCreate(){var m=$('#msg'),name=$('#nfName').value.trim(),bad=function(t){m.innerHTML='<span class="bd">'+t+'</span>'};
  if(!name)return bad('Enter a folder name.');
  if(S.folders.some(function(f){return f.name.toLowerCase()==name.toLowerCase()}))return bad('A folder with this name already exists.');
- var f={id:'fd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:name,type:S.nf.type,locked:false,created:Date.now()};
+ var f={id:'fd'+Date.now().toString(36)+Math.random().toString(36).slice(2,6),name:name,type:S.nf.type,locked:false,created:Date.now(),u:Date.now()};
  if(S.nf.lock){if(!needCrypto())return;var p1=$('#nfPw').value,p2=$('#nfPw2').value;
   if(p1.length<6)return bad('Password must be at least 6 characters.');
   if(p1!==p2)return bad('Passwords do not match.');
   f.salt=crypto.getRandomValues(new Uint8Array(16));f.hash=await pwHash(p1,f.salt);f.locked=true;await vaultPut(f.id,p1)}
- S.folders.push(f);await dbPut('folders',f);closeSheet();toast('Folder created')}
+ S.folders.push(f);await dbPut('folders',f);cloudSave();closeSheet();toast('Folder created')}
 function openFolder(id){var f=FLD(id);if(!f)return;if(f.locked&&!S.unlocked.has(id))return openUnlock(f);
  S.tab='folder';S.folderId=id;S.selectMode=false;S.selected.clear();S.anim=1;render();window.scrollTo(0,0)}
 var ATT={};
@@ -459,7 +460,7 @@ function askDelFolder(){var f=FLD(S.folderId);if(!f)return;S.sheet=true;var n=S.
  +'<div style="margin-top:20px;display:flex"><button class="btn" id="dfBtn" style="flex:1;margin-right:8px;background:var(--bad)">Delete folder</button><button class="btn o" data-a="close">Cancel</button></div>';
  $('#ov').style.display='flex';
  $('#dfBtn').onclick=function(){trashItems(S.items.filter(function(x){return x.folder===f.id}));
-  S.folders=S.folders.filter(function(x){return x.id!==f.id});dbDel('folders',f.id);dbDel('vault',f.id);S.unlocked['delete'](f.id);S.tab='home';closeSheet()}}
+  S.folders=S.folders.filter(function(x){return x.id!==f.id});dbDel('folders',f.id);dbDel('vault',f.id);fdelAdd(f.id);cloudSave();S.unlocked['delete'](f.id);S.tab='home';closeSheet()}}
 
 /* ---- Stored Folder Passwords (gated by Google Authenticator / any TOTP app) ---- */
 var VA={};
@@ -474,7 +475,7 @@ function vaultSetup(){S.pend=b32enc(crypto.getRandomValues(new Uint8Array(20)));
  +'<div class="s" id="msg" style="margin-top:10px">Keep this key safe. You need your authenticator to view passwords.</div>'
  +'<div style="margin-top:16px;display:flex"><button class="btn" id="vsGo" data-enter="1" style="flex:1;margin-right:8px">Verify and enable</button><button class="btn o" data-a="close">Cancel</button></div>';
  $('#vsGo').onclick=async function(){if(tooMany(VA))return;var c=$('#vsCode').value.replace(/\D/g,'');
-  if(await totpOk(S.pend,c)){await dbPut('meta',{k:'totp',secret:S.pend});S.pend=null;VA.n=0;vaultShow()}
+  if(await totpOk(S.pend,c)){await dbPut('meta',{k:'totp',secret:S.pend});cloudSave();S.pend=null;VA.n=0;vaultShow()}
   else{bump(VA);$('#msg').innerHTML='<span class="bd">Code is not correct. Check the key and your phone clock.</span>'}}}
 function vaultAsk(){
  $('#sh').innerHTML='<div class="grab"></div><h2>'+ic('key','font-size:18px;margin-right:8px')+'Stored Folder Passwords</h2><div class="s">Enter the 6-digit code from Google Authenticator.</div>'
@@ -516,6 +517,7 @@ async function scanFolders(){
 }
 
 function openProfile(){
+ if(!ready())return openLogin();
  S.sheet=true;
  $('#sh').innerHTML='<div class="grab"></div><div class="profile-hdr"><div class="av" id="pAv" style="width:80px;height:80px;font-size:30px;margin:0">ME</div><img id="pImg" style="display:none;width:80px;height:80px;border-radius:50%;object-fit:cover"><h3 id="pName">Loading...</h3><p id="pPhone"></p></div>'+
  '<div class="card" style="margin-top:20px">'+
@@ -523,7 +525,6 @@ function openProfile(){
   '<button class="action-btn" data-a="telegram_channel">'+ic('cloud')+' <span style="margin-left:12px">TeleSpace Channel</span></button>'+
   '<button class="action-btn" data-a="autosync">'+ic('sync')+' <span style="margin-left:12px">Auto-Sync Folders</span></button>'+
   '<button class="action-btn" data-a="settings">'+ic('gear')+' <span style="margin-left:12px">Settings</span></button>'+
-  '<button class="action-btn" data-a="proxy">'+ic('search')+' <span style="margin-left:12px">Add Proxy</span></button>'+
   '<a class="action-btn" href="privacy.html" target="_blank">'+ic('doc')+' <span style="margin-left:12px">Privacy & Policy</span></a>'+
   '<button class="action-btn" data-a="report">'+ic('warn')+' <span style="margin-left:12px">Report a problem</span></button>'+
  '</div>'+
@@ -585,24 +586,16 @@ function openProxy() {
 }
 
 function logoutAction(type){
-   if(type=='safe'){
-      localStorage.removeItem('tgsess'); localStorage.removeItem('tgmode');
-      S.mode=''; S.profilePic='';
-      toast('Logged out safely. Data remains in Telegram.');
-      closeSheet(); render();
-   } else if(type=='delete'){
-      toast('Deleting channel and data...');
-      if(window.TGDriver && window.TGDriver.deleteChannel) {
-          window.TGDriver.deleteChannel().finally(() => {
-              localStorage.clear(); indexedDB.deleteDatabase('iSpace-web'); location.reload();
-          });
-      } else {
-          localStorage.clear(); indexedDB.deleteDatabase('iSpace-web'); location.reload();
-      }
-   }
+ var D=window.TGDriver;
+ if(type=='safe'){toast('Logging out...');flushMeta().catch(function(){}).then(function(){return D&&D.logout?D.logout():0}).catch(function(){}).then(function(){endSession();wipeLocal();closeSheet();toast('Logged out. Your data remains in Telegram.')})}
+ else if(type=='delete'){toast('Deleting channel and data...');(D&&D.deleteChannel?D.deleteChannel():Promise.resolve(true)).then(function(ok){
+  if(!ok){toast('Could not delete the channel. Check your connection and try again.');return}
+  return (D.logout?D.logout():0).catch(function(){}).then(function(){endSession();wipeLocal();closeSheet();toast('Channel deleted.')})})}
 }
 
-function openSettings(){
+function openSettings(){return openLogin()}
+function openLogin(){if(ready()){S.sheet=true;$('#sh').innerHTML='<div class="grab"></div><h2>Settings</h2><label>Glass strength</label><input id="gl" type="range" min="0" max="100" value="'+GL+'"><button class="btn o" data-a="close" style="width:100%;margin-top:16px">Close</button>';$('#ov').style.display='flex';return}openAuth('phone')}
+function openSettingsOld(){
   S.sheet=true; var chVal = S.cfg.chat || '-100';
   $('#sh').innerHTML='<div class="grab"></div><h2>Login to TeleSpace</h2>'+
   '<div class="chips" style="margin-bottom: 20px;">'+
@@ -631,14 +624,14 @@ function saveCfg(){var t=$('#tk').value.replace(/\s/g,''),c=$('#ch').value.repla
   else m.innerHTML='<span class="bd">'+esc(r.description||'Could not connect.')+' Check the token, and that the bot is an admin.</span>'};
  x.onerror=function(){m.innerHTML='<span class="bd">No connection to Telegram.</span>'};x.send()}
 
-var AU={phone:['Your phone number','Use the full number with country code, like +966.','tel','+966 5xx xxx xxx','Continue'],code:['Enter the code','Telegram sent it to your other device or by SMS.','tel','Code','Verify'],password:['Two-step password','Enter the cloud password of your account.','password','Password','Sign in']};
+var AU={phone:['Your phone number','Use the full number with country code, like +92.','tel','+92 3xx xxxxxxx','Continue'],code:['Enter the code','Telegram sent it to your other device or by SMS.','tel','Code','Verify'],password:['Two-step password','Enter the cloud password of your account.','password','Password','Sign in']};
 function openAuth(step,msg){S.sheet=true;var T=AU[step];
- $('#sh').innerHTML='<div class="grab"></div><h2>'+T[0]+'</h2><div class="s">'+T[1]+'</div><input id="au" style="margin-top:16px" type="'+T[2]+'" inputmode="'+(step=='password'?'text':'tel')+'" autocomplete="'+(step=='code'?'one-time-code':'off')+'" placeholder="'+T[3]+'"><div class="s" id="msg" style="margin-top:12px">'+(msg||'')+'</div><div style="margin-top:16px;display:flex"><button class="btn" data-a="go" data-k="'+step+'" style="flex:1;margin-right:8px">'+T[4]+'</button><button class="btn o" data-a="close">Close</button></div>';
+ $('#sh').innerHTML='<div class="grab"></div><h2>'+T[0]+'</h2><div class="s">'+T[1]+'</div><input id="au" style="margin-top:16px" type="'+T[2]+'" inputmode="'+(step=='password'?'text':'tel')+'" autocomplete="'+(step=='code'?'one-time-code':'off')+'" placeholder="'+T[3]+'"><div class="s" id="msg" style="margin-top:12px">'+(msg||'')+'</div><div style="margin-top:16px;display:flex"><button class="btn" data-enter="1" data-a="go" data-k="'+step+'" style="flex:1;margin-right:8px">'+T[4]+'</button><button class="btn o" data-a="close">Close</button></div>';
  $('#ov').style.display='flex';setTimeout(function(){var i=$('#au');if(i)i.focus()},350)}
 function authGo(step){var m=$('#msg'),v=$('#au').value.replace(/^\s+|\s+$/g,'');if(!v){m.textContent='Fill in this field first.';return}
  if(!window.TGDriver){m.innerHTML='<span class="bd">Bridge not loaded.</span>';return}
  m.textContent='Please wait...';
- window.TGDriver[step](v).then(function(r){var n=r&&r.next;if(n=='ready'){S.mode='acct';try{localStorage.setItem('tgmode','acct')}catch(e){}closeSheet();toast('Signed in.');hist();fetchProfile();run()}else openAuth(n=='pass'?'password':'code')},function(e){m.innerHTML='<span class="bd">'+esc((e&&e.message)||e||'Something went wrong.')+'</span>'})}
+ window.TGDriver[step](v).then(function(r){var n=r&&r.next;if(n=='ready'){var old='';try{old=localStorage.getItem('tguid')||''}catch(e){}if(r.uid&&old!==r.uid)wipeLocal();try{localStorage.setItem('tguid',r.uid||'')}catch(e){}S.mode='acct';try{localStorage.setItem('tgmode','acct')}catch(e){}S.out=0;closeSheet();toast('Signed in.');hist();fetchProfile();run();startWatch()}else openAuth(n=='pass'?'password':'code')},function(e){m.innerHTML='<span class="bd">'+esc((e&&e.message)||e||'Something went wrong.')+'</span>'})}
 
 function fetchProfile(){
   if(!window.TGDriver||!window.TGDriver.getMe)return;
@@ -655,7 +648,7 @@ function fetchProfile(){
 }
 function hist(){
  var D=window.TGDriver;if(!D||!D.history)return;
- D.history().then(function(a){
+ D.history().then(histMeta).then(function(a){
   if(!a)return;var changed=false,sf=new Set(a.map(function(x){return x.fp})),si=new Set(a.map(function(x){return x.msgId}));
   var gone=function(it){return !sf.has(it.fp)&&!si.has(it.msgId)};
   /* removed from the Telegram channel outside the app: forget it locally and never re-upload it */
@@ -664,19 +657,75 @@ function hist(){
    else if(it.state=='trash'&&gone(it)){dropItem(it,true);changed=true}});
   var hf={},hi={};S.items.forEach(function(i){hf[i.fp]=1;if(i.msgId)hi[i.msgId]=1});
   a.forEach(function(x){
-   if(hf[x.fp]){var it=byFp(x.fp);if(it&&!it.msgId){it.msgId=x.msgId;save(it)}return}
+   if(hf[x.fp]){var it=byFp(x.fp);if(it&&!it.msgId){it.msgId=x.msgId;save(it)}if(it&&x.folder&&!it.folder&&FLD(x.folder)){it.folder=x.folder;save(it)}return}
    if(hi[x.msgId]||S.tomb.has(x.fp))return;
    var n={fp:x.fp,name:x.name,size:x.size||0,mtime:x.mtime||Date.now(),state:'done',p:1,msgId:x.msgId};
    if(x.folder&&FLD(x.folder))n.folder=x.folder;
    S.items.push(n);save(n);changed=true});
-  if(changed)paint()},function(){})
+  if(S.rtrash){S.items.forEach(function(it){if(it.state=='done'&&it.msgId&&S.rtrash[it.msgId]){it.state='trash';it.trashAt=S.rtrash[it.msgId];save(it)}})}loadThumbs();render()},function(){})
 }
+
+
+/* ---- session watch, logout, per-account wipe ---- */
+function authErr(e){return /AUTH_KEY|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED/.test(String((e&&(e.errorMessage||e.message))||e||''))}
+function chk(){var D=window.TGDriver;if(!D||!D.check||S.mode!='acct'||document.hidden||!navigator.onLine)return;D.check().catch(function(e){if(authErr(e))forceLogout()})}
+function startWatch(){if(S.wt)return;S.wt=setInterval(chk,60000);chk()}
+function endSession(){try{localStorage.removeItem('tgsess');localStorage.removeItem('tgmode')}catch(e){}S.mode='';S.active=0;S.metaReady=false;S.metaIds=[]}
+function wipeLocal(){S.items=[];S.folders=[];S.tomb=new Set();S.unlocked=new Set();S.syncFolders=[];S.selected.clear();S.selectMode=false;S.profilePic='';S.profileName='';S.vault=null;S.fdel={};S.rtrash=null;S.metaReady=false;S.metaIds=[];VK=null;S._v='';
+ ['f','sync','folders','tomb','meta','vault','prog'].forEach(function(n){try{if(S.db)S.db.transaction(n,'readwrite').objectStore(n).clear()}catch(e){}});try{localStorage.removeItem('tguid')}catch(e){}}
+function forceLogout(why){if(S.out)return;S.out=1;S.items.forEach(function(it){if(it.state=='up')rt(it.fp).stop='pause'});
+ var D=window.TGDriver;(D&&D.logout?D.logout():Promise.resolve()).catch(function(){}).then(function(){endSession();S.sheet=true;
+  $('#sh').innerHTML='<div class="grab"></div><h2>Logged out</h2><div class="s">'+esc(why||'You have been logged out from Telegram (this device was terminated). Please login again.')+'</div><div style="margin-top:20px"><button class="btn" data-a="auth" data-k="phone" style="width:100%">Login again</button></div>';
+  $('#ov').style.display='flex';render()})}
+/* ---- cloud copy of folders / passwords / authenticator key (JSON file in the user's own Telegram channel) ---- */
+function b64(u){var s='';for(var i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)}
+function unb64(s){var b=atob(s),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+function fdelAdd(id){S.fdel=S.fdel||{};S.fdel[id]=Date.now();dbPut('meta',{k:'fdel',d:S.fdel})}
+async function buildMeta(){var fl=(await dbAll('folders')).map(function(f){return{id:f.id,name:f.name,type:f.type,locked:!!f.locked,created:f.created,u:f.u||f.created||0,salt:f.salt?b64(f.salt):'',hash:f.hash?b64(f.hash):''}});
+ var vault={};(await dbAll('vault')).forEach(function(v){vault[v.id]={iv:b64(v.iv),ct:b64(v.ct)}});var tp=await dbGet('meta','totp'),vk=await dbGet('meta','vkraw'),trash={};
+ S.items.forEach(function(it){if(it.state=='trash'&&it.msgId)trash[it.msgId]=it.trashAt||1});
+ return{v:1,t:Date.now(),folders:fl,del:S.fdel||{},vault:vault,vk:vk?vk.b:'',totp:tp?tp.secret:'',trash:trash}}
+function msig(m){return (m.folders||[]).map(function(f){return f.id+':'+f.u}).sort().join()+'|'+(m.totp||'')+'|'+(m.vk||'')+'|'+Object.keys(m.trash||{}).sort().join()+'|'+Object.keys(m.del||{}).sort().join()+'|'+Object.keys(m.vault||{}).sort().join()}
+async function applyMeta(m){if(!m||m.v!==1)return;var byId={};(await dbAll('folders')).forEach(function(f){byId[f.id]=f});S.fdel=S.fdel||{};
+ Object.keys(m.del||{}).forEach(function(id){if(!S.fdel[id]||S.fdel[id]<m.del[id])S.fdel[id]=m.del[id]});
+ for(var r of (m.folders||[])){var l=byId[r.id];if(S.fdel[r.id]&&S.fdel[r.id]>=(r.u||0))continue;
+  if(!l||(r.u||0)>(l.u||l.created||0)){var f={id:r.id,name:r.name,type:r.type,locked:!!r.locked,created:r.created,u:r.u||0};if(r.locked){f.salt=unb64(r.salt);f.hash=unb64(r.hash)}await dbPut('folders',f);byId[r.id]=f}}
+ Object.keys(S.fdel).forEach(function(id){var l=byId[id];if(l&&S.fdel[id]>=(l.u||l.created||0)){delete byId[id];dbDel('folders',id);dbDel('vault',id)}});
+ S.folders=Object.keys(byId).map(function(k){return byId[k]});await dbPut('meta',{k:'fdel',d:S.fdel});
+ if(m.vk){var cur=await dbGet('meta','vkraw');if(!cur||cur.b!==m.vk){await dbPut('meta',{k:'vkraw',b:m.vk});VK=null}}
+ for(var vid in (m.vault||{})){var v=m.vault[vid];await dbPut('vault',{id:vid,iv:unb64(v.iv),ct:unb64(v.ct)})}
+ if(m.totp){var tp=await dbGet('meta','totp');if(!tp||tp.secret!==m.totp)await dbPut('meta',{k:'totp',secret:m.totp})}
+ S.rtrash=m.trash||{}}
+function histMeta(a){var D=window.TGDriver;if(!a)return null;
+ var fin=function(m){return applyMeta(m).then(function(){S.metaReady=true;S.metaIds=a.metaIds||[];return buildMeta().then(function(lm){if(!m||msig(lm)!==msig(m))cloudSave()})}).then(function(){return a})};
+ if(!a.metaId)return fin(null);
+ return D.readMeta(a.metaId).then(fin,function(){setTimeout(hist,20000);return a})}
+var cs=null,csBusy=false,csAgain=false;
+function cloudSave(){if(S.mode!='acct'||!window.TGDriver||!window.TGDriver.writeMeta)return;clearTimeout(cs);cs=setTimeout(doCloud,1500)}
+function doCloud(){if(!S.metaReady){setTimeout(cloudSave,5000);return Promise.resolve()}if(csBusy){csAgain=true;return Promise.resolve()}csBusy=true;
+ return buildMeta().then(function(m){return window.TGDriver.writeMeta(m,S.metaIds||[])}).then(function(id){S.metaIds=[id]}).catch(function(e){console.log('meta save failed',e);setTimeout(cloudSave,15000)}).then(function(){csBusy=false;if(csAgain){csAgain=false;cloudSave()}})}
+function flushMeta(){clearTimeout(cs);return doCloud()}
+/* ---- thumbnails for files restored from Telegram ---- */
+var thQ=[],thBusy=0,thTried={};
+function loadThumbs(){S.items.forEach(function(it){if(it.state!='done'||it.thumb||thTried[it.fp]||!it.msgId)return;var k=kind(it);if(k!='image'&&k!='video')return;thTried[it.fp]=1;thQ.push(it)});thPump()}
+function thPump(){var D=window.TGDriver;if(!D||!D.getThumb)return;while(thBusy<2&&thQ.length){(function(it){thBusy++;D.getThumb(it.msgId).then(function(u){if(u){it.thumb=u;save(it);clearTimeout(S.tr);S.tr=setTimeout(function(){if(!S.sheet)render()},500)}}).catch(function(){}).then(function(){thBusy--;thPump()})})(thQ.shift())}}
+/* ---- app feel: long-press select, no context menu / pinch zoom ---- */
+(function(){var t=null,sx=0,sy=0;
+ document.addEventListener('touchstart',function(e){var el=e.target.closest&&e.target.closest('[data-fp]');if(!el||e.touches.length>1)return;var at=el.getAttribute('data-a');if(at!='view'&&at!='select_file')return;var fp=el.getAttribute('data-fp');sx=e.touches[0].clientX;sy=e.touches[0].clientY;clearTimeout(t);
+  t=setTimeout(function(){t=null;S.lp=Date.now();if(!S.selectMode){S.selectMode=true;S.selected.clear()}S.selected.add(fp);try{navigator.vibrate&&navigator.vibrate(15)}catch(x){}render()},450)},{passive:true});
+ document.addEventListener('touchmove',function(e){if(e.touches.length>1){e.preventDefault();return}if(t&&(Math.abs(e.touches[0].clientX-sx)>10||Math.abs(e.touches[0].clientY-sy)>10)){clearTimeout(t);t=null}},{passive:false});
+ ['touchend','touchcancel'].forEach(function(n){document.addEventListener(n,function(){clearTimeout(t);t=null},{passive:true})});
+ document.addEventListener('click',function(e){if(S.lp&&Date.now()-S.lp<700){e.stopPropagation();e.preventDefault();S.lp=0}},true);
+ document.addEventListener('contextmenu',function(e){if(!/^(INPUT|TEXTAREA)$/.test(e.target.tagName))e.preventDefault()});
+ ['gesturestart','gesturechange','gestureend'].forEach(function(n){document.addEventListener(n,function(e){e.preventDefault()},{passive:false})});
+})();
 
 document.addEventListener('click',function(e){
  var el=e.target;while(el&&el!==document&&!(el.getAttribute&&(el.getAttribute('data-a')||el.id=='sv'||el.id=='fab'||el.id=='closeV')))el=el.parentNode;if(!el||el===document)return;
  if(el.id=='sv')return saveCfg();if(el.id=='fab')return openPlus();if(el.id=='closeV'){$('#ovV').style.display='none';$('#vContent').innerHTML='';return}
  var a=el.getAttribute('data-a'),k=el.getAttribute('data-k'),fp=el.getAttribute('data-fp'),it=fp?byFp(fp):null;
  if(S.vault)armVault();
+ if(!ready()&&['auth','go','close','eye'].indexOf(a)<0)return openLogin();
  if(a=='tab'){if(S.tab=='folder'&&k!='folder')S.unlocked.clear();S.tab=k;S.anim=1;S.q='';S.selectMode=false;S.selected.clear();if(k=='files')S.f='all';render();window.scrollTo(0,0)}
  else if(a=='settings')openSettings();else if(a=='close')closeSheet();
  else if(a=='kind'){S.tab='files';S.f=k;render()}
@@ -696,6 +745,10 @@ document.addEventListener('click',function(e){
   else{S.selected.add(fp);el.classList.add('selected-item');var ch2=el.querySelector('.chk-icon');if(ch2)ch2.innerHTML='<i class="fa-solid fa-circle-check" style="color:var(--ac)"></i>'}
   var bar=document.getElementById('sel-bar');if(bar)bar.remove();
   if(S.selected.size)$('#app').insertAdjacentHTML('beforeend',selBar())}
+ else if(a=='select_all'){var vis=S.items.filter(function(x){if(hid(x))return false;if(S.tab=='deleted')return x.state=='trash';if(x.state=='trash')return false;
+  if(S.tab=='photos')return kind(x)=='image'&&!x.folder;if(S.tab=='videos')return kind(x)=='video'&&!x.folder;if(S.tab=='audio')return kind(x)=='audio'&&!x.folder;
+  if(S.tab=='folder')return x.folder===S.folderId;var q=S.q.toLowerCase();return S.tab=='files'&&(S.f=='all'||kind(x)==S.f)&&(!q||x.name.toLowerCase().indexOf(q)>-1)});
+  var all=vis.length&&vis.every(function(x){return S.selected.has(x.fp)});vis.forEach(function(x){if(all)S.selected['delete'](x.fp);else S.selected.add(x.fp)});render()}
  else if(a=='del_selected')trashItems(sel());
  else if(a=='restore_selected')restoreItems(sel());
  else if(a=='purge_selected')askPurge(sel());
@@ -729,6 +782,7 @@ document.addEventListener('click',function(e){
   $('#sh').innerHTML='<div class="grab"></div><h2>Delete TeleSpace Account</h2><div class="s">Choose an option:</div><div style="margin-top:20px;display:flex;flex-direction:column;gap:10px"><button class="btn" data-a="factory_delete" style="background:var(--bad)">Factory Delete Backup Data</button><button class="btn o" data-a="do_logout">Keep Safe Data</button><button class="btn o" data-a="close">Cancel</button></div>'}
  else if(a=='factory_delete')showConfirm('factory','Factory Delete','This will permanently delete your Telegram Channel and all local data.','delete','Delete Account','var(--bad)');
  else if(a=='do_logout')showConfirm('safe','Keep Safe Data','This will log you out but keep your data in Telegram.','logout','Logout','var(--ac)');
+ else if(a=='report'){var lg=(window.__errs||[]).join('\n')||'No errors recorded';if(navigator.clipboard)navigator.clipboard.writeText(lg).then(function(){toast('Error log copied. Send it to the developer.')},function(){toast('Copy not allowed here')})}
  else if(a=='telegram_channel'){
   if(!window.TGDriver||!window.TGDriver.getChannelLink)return toast('Not connected');
   toast('Opening channel...');
@@ -745,14 +799,14 @@ $('#ov').addEventListener('click',function(e){if(e.target===this)closeSheet()});
   this.value='';this.accept=id=='pickA'?'':this.accept})});
 document.addEventListener('visibilitychange',function(){
  if(document.hidden){S.unlocked.clear();S.vault=null;if(S.tab=='folder'){S.tab='home';if(!S.sheet)render()}if(S.sheet&&($('#ulPw')||$('#vaCode')||$('#sh .vpw')))closeSheet();return}
- run();scanFolders();tickGreet()});
+ run();scanFolders();tickGreet();chk()});
 /* internet back: failed-by-network uploads restart, big uploads continue by themselves from the last saved part */
 window.addEventListener('online',function(){S.items.forEach(function(it){if(it.state=='fail'&&it.net&&!it.big){it.state='queued';save(it)}});run();if(S.tab=='transfers')render()});
 window.addEventListener('offline',function(){if(S.tab=='transfers')render()});
 
 openDb(function(){
- Promise.all([dbAll('folders'),dbAll('tomb'),dbAll('prog'),dbAll('sync')]).then(function(r){
-  S.folders=r[0];r[1].forEach(function(t){S.tomb.add(t.fp)});S.syncFolders=r[3];
+ Promise.all([dbAll('folders'),dbAll('tomb'),dbAll('prog'),dbAll('sync'),dbGet('meta','fdel')]).then(function(r){
+  S.folders=r[0];S.fdel=(r[4]&&r[4].d)||{};r[1].forEach(function(t){S.tomb.add(t.fp)});S.syncFolders=r[3];
   var prog={};r[2].forEach(function(p){prog[p.fp]=p});
   loadAll(function(){
    S.items=S.items.filter(function(it){
@@ -763,6 +817,6 @@ openDb(function(){
     if(prog[it.fp]&&it.state!='done'&&it.state!='trash')it.prog=prog[it.fp];
     return true});
    S.items.sort(function(a,b){return b.mtime-a.mtime});render();
-   if(S.mode=='acct'){hist();fetchProfile();setTimeout(scanFolders,2000)}
-   if(ready())run();else if(!S.items.length)setTimeout(openSettings,400)})})});
+   if(S.mode=='acct'){hist();fetchProfile();setTimeout(scanFolders,2000);startWatch()}
+   if(ready())run()})})});
 })();

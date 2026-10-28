@@ -33,7 +33,7 @@ function boot(){
     } catch(e) {}
 
     client=new L.TelegramClient(new L.StringSession(ls("tgsess")),C.apiId,C.apiHash,{
-        connectionRetries:5, useWSS:true, deviceModel:"iSpace Web", systemVersion:"Web", appVersion:"1.0", langCode:"en", systemLangCode:"en", proxy: proxyConfig
+        connectionRetries:5, useWSS:true, deviceModel:"iSpace Web", systemVersion:"Web", appVersion:"1.0", langCode:"en", systemLangCode:"en", proxy: undefined
     });
     return client.connect().then(function(){return client})
 }
@@ -70,7 +70,7 @@ function findOrMake(){
 
 function ready(){
     ls("tgsess",client.session.save());
-    return findOrMake().then(function(){ return {next:"ready"}; });
+    return findOrMake().then(function(){return client.getMe()}).then(function(me){ return {next:"ready",uid:String(me&&me.id)}; });
 }
 
 function fp(f){ return f.name+"|"+f.size+"|"+f.lastModified; }
@@ -166,7 +166,7 @@ function bigUpload(blob,name,caption,cb,o){
 }
 
 window.TGDriver={
-    phone:function(n){ return boot().then(c=>c.sendCode({apiId:C.apiId,apiHash:C.apiHash},n)).then(r=>{ phone=n; hash=r.phoneCodeHash; return {next:"code"}; }); },
+    phone:function(n){ n=String(n).replace(/[^\d+]/g,""); return boot().then(c=>c.sendCode({apiId:C.apiId,apiHash:C.apiHash},n)).then(r=>{ phone=n; hash=r.phoneCodeHash; return {next:"code"}; }); },
     code:function(v){ return client.invoke(new L.Api.auth.SignIn({phoneNumber:phone,phoneCodeHash:hash,phoneCode:String(v).replace(/\D/g,"")})).then(ready,function(e){ if(e&&e.errorMessage==="SESSION_PASSWORD_NEEDED")return {next:"pass"}; throw e; }); },
     password:function(v){ return client.signInWithPassword({apiId:C.apiId,apiHash:C.apiHash},{ password:()=>Promise.resolve(v), onError:e=>{throw e} }).then(ready); },
     
@@ -187,14 +187,49 @@ window.TGDriver={
         });
     },
 
+    /* real logout: ends the session on Telegram too, and forgets the old client/channel */
+    logout:function(){
+        var c=client; client=null; chat=null; phone=""; hash="";
+        try{localStorage.removeItem("tgsess")}catch(e){}
+        if(!c)return Promise.resolve();
+        return Promise.race([
+            c.invoke(new L.Api.auth.LogOut()).catch(function(){}).then(function(){return Promise.resolve(c.disconnect()).catch(function(){})}),
+            new Promise(function(r){setTimeout(r,4000)})]);
+    },
+    /* cheap call: fails with AUTH_KEY_UNREGISTERED / SESSION_REVOKED when the device was terminated in Telegram */
+    check:function(){ return boot().then(function(c){return c.invoke(new L.Api.updates.GetState())}); },
+    getThumb:function(msgId){
+        return boot().then(findOrMake).then(function(){return client.getMessages(chat,{ids:[msgId]})}).then(function(ms){
+            var m=ms&&ms[0],md=m&&m.media,th=(md&&md.document&&md.document.thumbs)||(md&&md.photo&&md.photo.sizes)||[];
+            if(!th.length)return null;
+            var pick=th.filter(function(x){return x.type==="m"})[0]||th.filter(function(x){return x.className==="PhotoSize"})[0]||th[0];
+            return client.downloadMedia(md,{thumb:pick}).then(function(buf){return buf&&buf.length?"data:image/jpeg;base64,"+buf.toString("base64"):null});
+        });
+    },
+    /* folders, passwords and TOTP key live in one small JSON file inside the user's OWN private channel */
+    readMeta:function(id){
+        return boot().then(findOrMake).then(function(){return client.getMessages(chat,{ids:[id]})}).then(function(ms){
+            if(!ms||!ms[0]||!ms[0].media)throw new Error("meta missing");
+            return client.downloadMedia(ms[0].media,{});
+        }).then(function(buf){return JSON.parse(new TextDecoder().decode(buf))});
+    },
+    writeMeta:function(obj,oldIds){
+        var buf=L.Buffer.from(JSON.stringify(obj));
+        return boot().then(findOrMake).then(function(){
+            return client.sendFile(chat,{file:new L.CustomFile("ispace-meta.json",buf.length,"",buf),forceDocument:true,caption:"#ispacemeta",silent:true});
+        }).then(function(m){
+            var ids=(oldIds||[]).filter(function(x){return x!==m.id});
+            return (ids.length?client.deleteMessages(chat,ids,{revoke:true}).catch(function(){}):Promise.resolve()).then(function(){return m.id});
+        });
+    },
     deleteMessages:function(ids){
         return boot().then(findOrMake).then(()=>client.deleteMessages(chat, ids, {revoke: true}));
     },
     
     deleteChannel: function() {
         return boot().then(findOrMake).then(function() {
-            if (chat) return client.invoke(new L.Api.channels.DeleteChannel({channel: chat}));
-        }).catch(e => console.log("Channel deletion failed", e));
+            if (chat) return client.invoke(new L.Api.channels.DeleteChannel({channel: chat})).then(function(){chat=null;return true}); return true;
+        }).catch(function(e){ console.log("Channel deletion failed", e); return false; });
     },
 
     getMedia:function(msgId){
@@ -220,8 +255,9 @@ window.TGDriver={
     },
     history:function(){
         return boot().then(findOrMake).then(()=>client.getMessages(chat,{limit:3000})).then(function(ms){
-            var out=[],i,t,raw,p;
+            var out=[],i,t,raw,p;out.metaIds=[];
             for(i=0;i<ms.length;i++){
+                if((ms[i].message||"").indexOf("#ispacemeta")===0){out.metaIds.push(ms[i].id);if(!out.metaId||ms[i].id>out.metaId)out.metaId=ms[i].id;continue}
                 t=(ms[i].message||"").split("#fp:");
                 if(t.length>1){
                     raw=t[1].split("\n#fd:");

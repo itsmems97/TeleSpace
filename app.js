@@ -843,14 +843,6 @@ document.addEventListener('touchend', function(e) {
     }
 });
 
-/* Add blur class when sheet opens */
-var _origOpenSheet = window.openSheet;
-document.addEventListener('click', function(e) {
-    if (e.target.closest('[data-a="profile"]') || e.target.closest('[data-a="settings"]') || e.target.closest('[data-a="new_folder"]') || e.target.closest('[data-a="upload_here"]') || e.target.closest('[data-a="vault"]') || e.target.closest('[data-a="autosync"]')) {
-        setTimeout(function(){ document.body.classList.add('sheet-open'); }, 10);
-    }
-});
-
 /* ---- app feel: long-press select, no context menu / pinch zoom ---- */
 (function(){var t=null,sx=0,sy=0;
  document.addEventListener('touchstart',function(e){var el=e.target.closest&&e.target.closest('[data-fp]');if(!el||e.touches.length>1)return;var at=el.getAttribute('data-a');if(at!='view'&&at!='select_file')return;var fp=el.getAttribute('data-fp');sx=e.touches[0].clientX;sy=e.touches[0].clientY;clearTimeout(t);
@@ -963,7 +955,9 @@ document.addEventListener('keydown',function(e){if(e.key=='Enter'&&e.target.tagN
 $('#ov').addEventListener('click',function(e){if(e.target===this)closeSheet()});
 ['pickM','pickA','pickDir','pickDir2'].forEach(function(id){
  if($('#'+id))$('#'+id).addEventListener('change',function(){
-  document.body.classList.remove('sheet-open'); // Blur hatane ke liye
+  document.body.classList.remove('sheet-open');
+  document.getElementById('ov').style.display = 'none';
+  S.sheet = false;
   var t=S.pickTarget;S.pickTarget=null;
   if(this.files&&this.files.length)add(Array.prototype.slice.call(this.files),t);
   this.value='';this.accept=id=='pickA'?'':this.accept})});

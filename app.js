@@ -1,3 +1,13 @@
+if('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', function(e) {
+        if (e.data.type === 'FETCH_CHUNK') {
+            var port = e.ports[0];
+            window.TGDriver.getChunk(e.data.msgId, e.data.offset, e.data.limit).then(function(buf) {
+                port.postMessage(buf);
+            }).catch(function() { port.postMessage(new ArrayBuffer(0)); });
+        }
+    });
+}
 (function(){
 var $=function(s){return document.querySelector(s)};
 var MAXB=Math.floor(1.9*1073741824),BOTB=50*1024*1024; /* 1.9 GB per file (Telegram allows 4000 x 512 KB parts) */
@@ -6,7 +16,7 @@ var RT={};function rt(fp){return RT[fp]||(RT[fp]={})}
 var KINDS=[['image','Images','photo','photos'],['video','Videos','video','videos'],['app','Apps','app','apps'],['zip','Archives','file','files'],['audio','Audio','track','tracks'],['doc','Documents','file','files'],['other','Other','file','files']];
 var ICON={image:'photos',video:'video',audio:'audio',doc:'doc',zip:'zip',app:'apk',other:'doc'};
 /* Folder types: what each folder accepts */
-var FT={photos:{l:'Photos',acc:'image/*',only:'photos',cls:'icon-photos',grid:1},videos:{l:'Videos',acc:'video/*',only:'videos',cls:'icon-kind-video',grid:1},audio:{l:'Audio',acc:'audio/*',only:'audio files',cls:'icon-kind-audio'},docs:{l:'Documents',acc:'',only:'documents (PDF, Office, text, archives, other files)',cls:'icon-kind-doc'}};
+var FT={photos:{l:'Photos',acc:'image/*',only:'photos',cls:'icon-photos',grid:1},videos:{l:'Videos',acc:'video/*',only:'videos',cls:'icon-kind-video',grid:1},audio:{l:'Audio',acc:'audio/*',only:'audio files',cls:'icon-kind-audio'},docs:{l:'Documents',acc:'',only:'documents (PDF, Office, text, archives, other files)',cls:'icon-kind-doc'},notes:{l:'Notes',acc:'',only:'text files',cls:'icon-kind-doc',grid:0}};
 try{var c=JSON.parse(localStorage.getItem('tgcfg')||'{}');S.cfg.token=c.token||'';S.cfg.chat=c.chat||''}catch(e){}
 try{if(window.TGDriver&&localStorage.getItem('tgmode')=='acct')S.mode='acct'}catch(e){}
 var GL=70;try{GL=+(localStorage.getItem('tggl')||70)}catch(e){}
@@ -77,7 +87,7 @@ function stopped(it,done){var r=rt(it.fp),s=r.stop;r.stop=null;if(s=='cancel')dr
 function send(it,done){
  var r=rt(it.fp);r.stop=null;
  if(S.mode=='acct'&&window.TGDriver){
-  var o={fp:it.fp,folder:it.folder,mime:it.type,state:it.prog,stop:function(){return rt(it.fp).stop},checkpoint:function(st){it.prog=st;saveProg(it.fp,st)}};
+  var o={fp:it.fp,folder:it.folder,mime:it.type,state:it.prog,thumb:it.thumb,stop:function(){return rt(it.fp).stop},checkpoint:function(st){it.prog=st;saveProg(it.fp,st)}};
   window.TGDriver.upload(it.blob,it.name,function(p){it.p=p;paint()},o).then(function(id){
    if(rt(it.fp).stop=='cancel'){window.TGDriver.deleteMessages([id]).catch(function(){});dropItem(it,true);return done()}
    it.state='done';it.doneAt=Date.now();it.msgId=id;it.blob=null;it.p=1;it.err='';it.prog=null;delProg(it.fp);save(it);done()
@@ -130,30 +140,33 @@ function add(files,target,auto){var fresh=0,skipped=0,big=0,wrong=0,trashed=0,i,
  run();paint()}
 
 /* Video & Image Thumbnail Generation */
-function thumb(it){
-    if(!window.URL) return;
-    let k = kind(it);
-    if(k !== 'image' && k !== 'video') return;
-    if(!it.blob) return; 
-    let u = URL.createObjectURL(it.blob);
+function thumb(it, cb){
+    if(!window.URL) return cb && cb();
+    var k = kind(it);
+    if(k !== 'image' && k !== 'video') return cb && cb();
+    if(!it.blob) return cb && cb();
+    var u = URL.createObjectURL(it.blob);
     if (k === 'image') {
-        let im = new Image();
-        im.onload = () => makeThumb(im, it, u);
+        var im = new Image();
+        im.onload = function() { makeThumb(im, it, u); cb && cb(); };
+        im.onerror = function() { cb && cb(); };
         im.src = u;
     } else if (k === 'video') {
-        let vid = document.createElement('video');
-        vid.src = u; vid.muted = true; vid.playsInline = true;
-        vid.onloadeddata = () => { vid.currentTime = 1; };
-        vid.onseeked = () => { makeThumb(vid, it, u); };
+        var vid = document.createElement('video');
+        vid.src = u; vid.muted = true; vid.playsInline = true; vid.preload = 'auto';
+        vid.onloadeddata = function() { vid.currentTime = 1; };
+        vid.onseeked = function() { makeThumb(vid, it, u); cb && cb(); };
+        vid.onerror = function() { cb && cb(); };
+        setTimeout(function() { cb && cb(); }, 5000); // 5s timeout fallback
     }
 }
 function makeThumb(el, it, u) {
     try {
-        let w = el.width || el.videoWidth;
-        let h = el.height || el.videoHeight;
+        var w = el.width || el.videoWidth;
+        var h = el.height || el.videoHeight;
         if (!w || !h) throw 'no dims';
-        let s = Math.min(1, 200 / Math.max(w, h));
-        let c = document.createElement('canvas');
+        var s = Math.min(1, 200 / Math.max(w, h));
+        var c = document.createElement('canvas');
         c.width = Math.max(1, w * s); c.height = Math.max(1, h * s);
         c.getContext('2d').drawImage(el, 0, 0, c.width, c.height);
         it.thumb = c.toDataURL('image/jpeg', 0.7);
@@ -208,10 +221,15 @@ function home(){
  if(c.n+c.pz){var pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);
   extraRows+='<div class="list-row" data-a="tab" data-k="transfers"><div class="list-row-left"><div class="icon-wrapper icon-kind-other">'+ic('swap')+'</div><div class="list-row-text"><h3>'+(c.n+c.pz)+' transfer'+(c.n+c.pz>1?'s':'')+(c.n?' in progress':' paused')+'</h3><p>'+(c.n?pct+'% done':'Tap to resume')+'</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>'}
  if(c.f){extraRows+='<div class="list-row" data-a="retry"><div class="list-row-left"><div class="icon-wrapper icon-kind-other" style="background:var(--bad)">'+ic('warn')+'</div><div class="list-row-text"><h3>'+c.f+' transfer'+(c.f>1?'s':'')+' failed</h3><p>Tap to retry</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>'}
- var rows='';KINDS.forEach(function(K){var b=by[K[0]];if(!b)return;
-  rows+='<div class="list-row" data-a="kind" data-k="'+K[0]+'"><div class="list-row-left"><div class="icon-wrapper icon-kind-'+K[0]+'">'+ic(ICON[K[0]])+'</div><div class="list-row-text"><h3>'+K[1]+'</h3><p>'+b.n+' '+(b.n==1?K[2]:K[3])+' &middot; '+fmt(b.b)+'</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>'});
+ var rows=''; var ALLOWED_ROWS = ['doc', 'zip', 'app', 'other'];
+KINDS.forEach(function(K){if (ALLOWED_ROWS.indexOf(K[0]) === -1) return; var b=by[K[0]];if(!b)return;
+ rows+='<div class="list-row" data-a="kind" data-k="'+K[0]+'"><div class="list-row-left"><div class="icon-wrapper icon-kind-'+K[0]+'">'+ic(ICON[K[0]])+'</div><div class="list-row-text"><h3>'+K[1]+'</h3><p>'+b.n+' '+(b.n==1?K[2]:K[3])+' &middot; '+fmt(b.b)+'</p></div></div><i class="fa-solid fa-chevron-right chevron"></i></div>'});
  var cnt=function(kk){return S.items.filter(function(x){return x.state=='done'&&!x.folder&&kind(x)==kk}).length};
- var g=greetNow();
+var g=greetNow();
+var utilities = '<div class="sec">Utilities</div><div class="app-grid">'
+ +'<div class="app-item" data-a="open_util" data-k="filemanager"><div class="icon-wrapper icon-kind-doc">'+ic('folder')+'</div><h3>File Manager</h3><p>Manage folders</p></div>'
+ +'<div class="app-item" data-a="open_util" data-k="notepad"><div class="icon-wrapper icon-kind-doc">'+ic('doc')+'</div><h3>Notepad</h3><p>Text files</p></div>'
+ +'</div>';
  var mine=S.folders.length?'<div class="sec">My folders</div><div class="app-grid">'+S.folders.map(function(f){var t=FT[f.type]||FT.docs,m=S.items.filter(function(x){return x.folder===f.id&&x.state=='done'}).length;
   return '<div class="app-item" data-a="open_folder" data-k="'+esc(f.id)+'"><div class="icon-wrapper '+t.cls+'">'+ic(f.locked?'lock':'folder')+'</div><h3>'+esc(f.name)+'</h3><p>'+(f.locked?'Protected':m+' items')+' &middot; '+t.l+'</p></div>'}).join('')+'</div>':'';
  return '<div class="header"><h1>iSpace</h1><div class="profile-pic" data-a="profile">'+avHtml+'</div></div>'
@@ -230,14 +248,23 @@ function home(){
   +tile('tab','transfers','icon-mail','swap','Transfers',(c.n+c.pz)+' active')
   +tile('autosync','','icon-findmy','sync','Auto-Sync',S.syncFolders.length+' folders')
   +tile('tab','deleted','icon-trash','trash','Deleted',c.del+' items')
- +'</div>'+mine
+ +'</div>'+utilities+mine
  +(n?'<div class="sec">Storage</div>'+rows:'')
 }
 
-function listHtml(){var q=S.q.toLowerCase(),L=S.items.filter(function(it){
+function listHtml(){
+ var q=S.q.toLowerCase(),L=S.items.filter(function(it){
   if(it.state=='trash'||hid(it))return false;
   if(S.f!='all'&&kind(it)!=S.f)return false;return !q||it.name.toLowerCase().indexOf(q)>-1});
- return L.length?'<div class="file-list">'+L.map(row).join('')+'</div>':'<div class="empty">'+(q?'No files match search.':'No files here yet.')+'</div>'}
+ if(!L.length)return '<div class="empty">'+(q?'No files match search.':'No files here yet.')+'</div>';
+ var g={},o=[];
+ L.forEach(function(it){var m=dt(it.mtime,{month:'long',year:'numeric'});if(!g[m]){g[m]=[];o.push(m)}g[m].push(it)});
+ var html='';
+ o.forEach(function(m){
+     html += '<div class="sec">'+m+'</div><div class="file-list">'+g[m].map(row).join('')+'</div>';
+ });
+ return html;
+}
 
 function files(){
  var F=[['all','All'],['image','Photos'],['video','Videos'],['audio','Audio'],['doc','Documents']];
@@ -254,8 +281,8 @@ function browse(c){
   o.forEach(function(m){body+='<div class="sec">'+m+'</div><div class="grid">'+g[m].map(function(it){var isSel=S.selected.has(it.fp);
    return '<div class="cell '+(isSel?'selected-item':'')+'" data-a="'+(S.selectMode?'select_file':'view')+'" data-fp="'+esc(it.fp)+'">'+(it.thumb?'<img alt="" src="'+it.thumb+'">':'<div class="c" style="color:var(--k-'+kind(it)+')">'+ic(ICON[kind(it)])+'</div>')+'<em class="'+(it.state=='done'?'d':'')+'"></em>'+(it.state=='up'?'<div class="cpb"><i id="pb_'+fid(it)+'" style="width:'+Math.round((it.p||0)*100)+'%"></i></div>':it.state=='queued'?'<div class="cpb"><i style="width:3%"></i></div>':'')+'</div>'}).join('')+'</div>'})}
  else body='<div class="file-list">'+L.map(row).join('')+'</div>';
- return navHdr(c.title,selBtn()+(c.right||''))+(!ready()?connectCard():'')+body
- +(ready()?'<div style="margin-top:16px"><button class="btn" data-a="upload_here">'+ic('upload')+'<span style="margin-left:8px">'+c.upload+'</span></button></div>':'')+selBar()}
+ return navHdr(c.title,selBtn()+(c.right||''))+(!ready()?connectCard():'')+(c.topHtml||'')+body
++(ready()?'<div style="margin-top:16px"><button class="btn" data-a="upload_here">'+ic('upload')+'<span style="margin-left:8px">'+c.upload+'</span></button></div>':'')+selBar()}
 
 function curCtx(){var t=S.tab;
  if(t=='photos')return{type:'photos'};if(t=='videos')return{type:'videos'};if(t=='audio')return{type:'audio'};
@@ -282,22 +309,43 @@ function transfers(){
 
 function render(){
  if(!ready())S.tab='home';
- if(S.tab=='folder'){var ff=FLD(S.folderId);if(!ff||(ff.locked&&!S.unlocked.has(ff.id)))S.tab='home'}
+ if(S.tab=='folder' && S.folderId!='filemanager' && S.folderId!='notepad'){var ff=FLD(S.folderId);if(!ff||(ff.locked&&!S.unlocked.has(ff.id)))S.tab='home'}
  var t=S.tab,v;
  if(t=='home')v=home();else if(t=='files')v=files();
- else if(t=='photos')v=browse({title:'Photos',test:function(it){return kind(it)=='image'&&!it.folder},grid:1,empty:'No photos backed up yet.',upload:'Choose photos'});
+ else if(t=='photos'){
+   var chips = '<div class="chips" style="margin-top:10px">'+
+     '<button class="chip'+(S.f=='all'?' on':'')+'" data-a="f" data-k="all">All</button>'+
+     '<button class="chip'+(S.f=='image'?' on':'')+'" data-a="f" data-k="image">Photos</button>'+
+     '<button class="chip'+(S.f=='video'?' on':'')+'" data-a="f" data-k="video">Videos</button>'+
+     '<button class="chip'+(S.f=='audio'?' on':'')+'" data-a="f" data-k="audio">Audio</button>'+
+     '<button class="chip'+(S.f=='doc'?' on':'')+'" data-a="f" data-k="doc">Docs</button></div>';
+   v=browse({title:'All',test:function(it){return !it.folder && (S.f=='all'||kind(it)==S.f)},grid:(S.f=='all'||S.f=='image'||S.f=='video')?1:0,empty:'No files backed up yet.',upload:'Choose files',topHtml:chips});
+ }
  else if(t=='videos')v=browse({title:'Videos',test:function(it){return kind(it)=='video'&&!it.folder},grid:1,empty:'No videos backed up yet.',upload:'Choose videos'});
  else if(t=='audio')v=browse({title:'Audio',test:function(it){return kind(it)=='audio'&&!it.folder},empty:'No audio backed up yet.',upload:'Choose audio'});
  else if(t=='transfers')v=transfers();
  else if(t=='deleted')v=navHdr('Deleted',selBtn())+'<div class="s" style="margin:0 4px 12px">These files are still in your Telegram backup. Deleting here removes them from the channel permanently.</div>'
    +(function(){var L=S.items.filter(function(it){return it.state=='trash'&&!hid(it)}).sort(function(a,b){return (b.trashAt||0)-(a.trashAt||0)});return L.length?'<div class="file-list">'+L.map(row).join('')+'</div>':'<div class="empty">No items deleted.</div>'})()+selBar();
- else if(t=='folder'){var f=FLD(S.folderId),T=FT[f.type]||FT.docs;
-  v=browse({title:f.name,test:function(it){return it.folder===f.id},grid:T.grid,empty:'Empty. Only '+T.only+' can be stored here.',upload:'Add '+T.l.toLowerCase(),right:'<button class="ib" style="color:var(--bad);width:32px" data-a="del_folder" aria-label="Delete folder">'+ic('trash')+'</button>'})}
+ else if(t=='folder'){
+  if(S.folderId=='filemanager'){
+      v=browse({title:'File Manager',test:function(it){return it.folder && it.folder!='notepad'},grid:0,empty:'No custom files yet. Use + to create folders or upload.',upload:'Upload files'});
+  } else if(S.folderId=='notepad'){
+      v=browse({title:'Notepad',test:function(it){return it.folder=='notepad'},grid:0,empty:'No notes yet. Use + to create a note.',upload:'Create note'});
+  } else {
+      var f=FLD(S.folderId),T=FT[f.type]||FT.docs;
+      v=browse({title:f.name,test:function(it){return it.folder===f.id},grid:T.grid,empty:'Empty. Only '+T.only+' can be stored here.',upload:'Add '+T.l.toLowerCase(),right:'<button class="ib" style="color:var(--bad);width:32px" data-a="del_folder" aria-label="Delete folder">'+ic('trash')+'</button>'})
+  }
+ }
  else v=home();
  if(S._v!==v){S._v=v;$('#app').innerHTML=v}if(S.anim){S.anim=0;var A=$('#app');A.classList.remove('in');void A.offsetWidth;A.classList.add('in')}
- $('#nav').innerHTML=[['home','Home','home'],['files','Drive','folder'],['photos','Photos','photos']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
-  +'<div data-a="profile" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>More</span></div>';
- live()}
+ $('#nav').innerHTML=[['home','Home','home'],['files','Drive','folder'],['photos','All','images']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'">'+ic(t[2])+'<span>'+t[1]+'</span></div>'}).join('')
+ +'<div data-a="profile" class="nav-item"><i class="fa-solid fa-ellipsis"></i><span>More</span></div>';
+var isProtectedFolder = S.tab == 'folder' && FLD(S.folderId) && FLD(S.folderId).locked;
+document.body.classList.toggle('nonav', isProtectedFolder);
+document.body.classList.toggle('select-mode', S.selectMode);
+var fabEl = document.getElementById('fab');
+if(fabEl) fabEl.style.display = (S.tab=='transfers'||S.tab=='deleted')?'none':'flex';
+live()}
 function live(){var c=counts(),b=$('#live');if(!c.n||!ready()){b.style.display='none';return}
  var pct=Math.round(((c.p+c.d)/Math.max(1,c.n+c.d))*100);b.style.display='block';$('#liveT').textContent='Uploading '+c.n+' item'+(c.n>1?'s':'')+' \u00B7 '+pct+'%';$('#liveB').style.width=pct+'%'}
 
@@ -319,32 +367,48 @@ function openViewer(it){
  $('#vContent').innerHTML='<div style="color:#fff">Loading...</div>';$('#ovV').style.display='flex';$('#vDownload').style.display='none';
  if(it.state=='up'&&it.blob){showMedia(it.blob,it.name,it.type)}
  else if((it.state=='done'||it.state=='trash')&&window.TGDriver){
-  window.TGDriver.getMedia(it.msgId).then(function(buf){
-   var ext=it.name.split('.').pop().toLowerCase(),mime=it.type||'application/octet-stream';
-   if(!mime||mime==='application/octet-stream'){
-    if(['mp4','webm','mov','mkv'].includes(ext))mime='video/'+ext;
-    else if(['jpg','jpeg','png','gif','webp'].includes(ext))mime='image/'+(ext==='jpg'?'jpeg':ext)}
-   showMedia(new Blob([buf],{type:mime}),it.name,mime)
-  }).catch(function(){$('#vContent').innerHTML='<div style="color:#ff3b30">Error loading file. Try downloading.</div>'});
- }else $('#vContent').innerHTML='<div style="color:#fff">Preview needs phone sign-in.</div>'
+ var k = kind(it);
+ if(k == 'video'){
+     var streamUrl = '/ispace-stream/' + it.msgId;
+     $('#vContent').innerHTML = '<video src="'+streamUrl+'" controls autoplay playsinline id="vVideo"></video>';
+     $('#vDownload').style.display = 'flex';
+     $('#vDownload').href = streamUrl;
+     $('#vDownload').download = it.name;
+ } else {
+     window.TGDriver.getMedia(it.msgId).then(function(buf){
+      var ext=it.name.split('.').pop().toLowerCase(),mime=it.type||'application/octet-stream';
+      if(!mime||mime==='application/octet-stream'){
+       if(['jpg','jpeg','png','gif','webp'].includes(ext))mime='image/'+(ext==='jpg'?'jpeg':ext)}
+      showMedia(new Blob([buf],{type:mime}),it.name,mime)
+     }).catch(function(){$('#vContent').innerHTML='<div style="color:#ff3b30">Error loading file. Try downloading.</div>'});
+ }
+}else $('#vContent').innerHTML='<div style="color:#fff">Preview needs phone sign-in.</div>'
 }
 
 function showMedia(blob, name, type){
-  let url = URL.createObjectURL(blob);
-  let ext = name.split('.').pop().toLowerCase();
-  let isVid = /video/.test(type) || /^(mp4|mov|mkv|webm|avi|3gp)$/.test(ext);
-  let isImg = /image/.test(type) || /^(jpe?g|png|gif|webp|heic|heif|bmp)$/.test(ext);
+  var url = URL.createObjectURL(blob);
+  var ext = name.split('.').pop().toLowerCase();
+  var isVid = /video/.test(type) || /^(mp4|mov|mkv|webm|avi|3gp)$/.test(ext);
+  var isImg = /image/.test(type) || /^(jpe?g|png|gif|webp|heic|heif|bmp)$/.test(ext);
+  var isAud = /audio/.test(type) || /^(mp3|m4a|aac|wav|ogg|flac|opus)$/.test(ext);
+  var isPdf = ext === 'pdf';
+  var isTxt = /text/.test(type) || /^(txt|csv|md|json|js|css|html)$/.test(ext);
 
-  if(isImg){
-      $('#vContent').innerHTML = '<img src="'+url+'">';
-  } else if(isVid){
-      $('#vContent').innerHTML = '<video src="'+url+'" controls autoplay playsinline></video>';
-  } else {
-      $('#vContent').innerHTML = '<div style="color:#fff;text-align:center;padding:20px;"><p>Preview not available</p><p style="font-size:12px;opacity:0.7">'+esc(name)+'</p></div>';
+  if(isImg){ $('#vContent').innerHTML = '<img src="'+url+'">'; }
+  else if(isVid){ $('#vContent').innerHTML = '<video src="'+url+'" controls autoplay playsinline id="vVideo"></video>'; }
+  else if(isAud){ $('#vContent').innerHTML = '<div style="color:#fff;text-align:center;width:100%;padding:20px;"><div style="font-size:60px;color:var(--ac);margin-bottom:20px;"><i class="fa-solid fa-music"></i></div><audio src="'+url+'" controls autoplay style="width:100%"></audio></div>'; }
+  else if(isPdf){ $('#vContent').innerHTML = '<iframe src="'+url+'" style="width:100%;height:80vh;border:none;background:#fff;"></iframe>'; }
+  else if(isTxt){ blob.text().then(function(txt){ $('#vContent').innerHTML = '<div style="color:#fff;background:rgba(255,255,255,0.1);padding:20px;border-radius:10px;max-height:80vh;overflow:auto;white-space:pre-wrap;font-family:monospace;text-align:left;width:100%;">'+esc(txt)+'</div>'; }); }
+  else {
+      var iconCls = 'fa-file';
+      if(/^(zip|rar|7z|tar|gz)$/.test(ext)) iconCls = 'fa-file-zipper';
+      else if(/^(docx?|xlsx?|pptx?)$/.test(ext)) iconCls = 'fa-file-word';
+      else if(/^(apk|ipa|xapk)$/.test(ext)) iconCls = 'fa-mobile-screen-button';
+      $('#vContent').innerHTML = '<div style="color:#fff;text-align:center;padding:20px;"><div style="font-size:80px;color:var(--tx3);margin-bottom:20px;"><i class="fa-solid '+iconCls+'"></i></div><p style="font-size:18px;font-weight:600;margin-bottom:10px;">Preview after download</p><p style="font-size:14px;opacity:0.7;">'+esc(name)+'</p></div>';
   }
   $('#vDownload').href = url;
   $('#vDownload').download = name;
-  $('#vDownload').style.display = 'inline-block';
+  $('#vDownload').style.display = 'flex';
 }
 
 async function doDownloadSelected(){
@@ -395,8 +459,8 @@ function askPurge(list){
  if(!list.length)return;S.sheet=true;
  $('#sh').innerHTML='<div class="grab"></div><h2>Delete forever?</h2><div class="s"><b class="bd">Cannot recover.</b> '+(list.length==1?'This file':list.length+' files')+' will be permanently removed from your Telegram backup channel.</div>'
  +'<div style="margin-top:20px;display:flex"><button class="btn" id="pgBtn" style="flex:1;margin-right:8px;background:var(--bad)">Delete forever</button><button class="btn o" data-a="close">Cancel</button></div>';
- $('#ov').style.display='flex';
- $('#pgBtn').onclick=function(){var b=this;b.textContent='Deleting...';b.disabled=true;purge(list).then(closeSheet,function(){b.textContent='Delete forever';b.disabled=false})}}
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');
+$('#pgBtn').onclick=function(){var b=this;b.textContent='Deleting...';b.disabled=true;purge(list).then(closeSheet,function(){b.textContent='Delete forever';b.disabled=false})}}
 function sel(){return S.items.filter(function(it){return S.selected.has(it.fp)})}
 
 /* ---- passwords, hashing, encrypted vault, TOTP ---- */
@@ -423,7 +487,7 @@ function bump(o){o.n=(o.n||0)+1;if(o.n>=5){o.n=0;o.until=Date.now()+30000}}
 /* ---- folders ---- */
 function openPlus(){if(!ready())return openSettings();S.sheet=true;var ctx=curCtx(),up=ctx&&ctx.id?'Upload to this folder':ctx?'Upload '+FT[ctx.type].l.toLowerCase():'Upload files';
  $('#sh').innerHTML='<div class="grab"></div><h2>Add</h2><div class="card" style="margin-top:12px"><button class="action-btn" data-a="new_folder">'+ic('fplus')+'<span style="margin-left:12px">New folder</span></button><button class="action-btn" data-a="upload_here" style="border-bottom:0">'+ic('upload')+'<span style="margin-left:12px">'+up+'</span></button></div><button class="btn o" data-a="close" style="width:100%;margin-top:8px">Cancel</button>';
- $('#ov').style.display='flex'}
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open')}
 function hint(){var h=$('#nfHint');if(h)h.textContent='Only '+FT[S.nf.type].only+' can be stored in this folder.'}
 function openNewFolder(){S.sheet=true;S.nf={type:'videos',lock:false};
  $('#sh').innerHTML='<div class="grab"></div><h2>New folder</h2>'
@@ -433,8 +497,8 @@ function openNewFolder(){S.sheet=true;S.nf={type:'videos',lock:false};
  +'<div id="pwBox" style="display:none">'+pwField('nfPw','Password','At least 6 characters')+pwField('nfPw2','Confirm password','Re-enter password')+'</div>'
  +'<div class="s" id="msg" style="margin-top:10px"></div>'
  +'<div style="margin-top:16px;display:flex"><button class="btn" id="nfGo" data-enter="1" style="flex:1;margin-right:8px">Create folder</button><button class="btn o" data-a="close">Cancel</button></div>';
- $('#ov').style.display='flex';hint();
- $('#nfGo').onclick=nfCreate}
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');hint();
+$('#nfGo').onclick=nfCreate}
 async function nfCreate(){var m=$('#msg'),name=$('#nfName').value.trim(),bad=function(t){m.innerHTML='<span class="bd">'+t+'</span>'};
  if(!name)return bad('Enter a folder name.');
  if(S.folders.some(function(f){return f.name.toLowerCase()==name.toLowerCase()}))return bad('A folder with this name already exists.');
@@ -450,7 +514,7 @@ var ATT={};
 function openUnlock(f){S.sheet=true;
  $('#sh').innerHTML='<div class="grab"></div><h2>'+ic('lock','font-size:18px;margin-right:8px')+esc(f.name)+'</h2><div class="s">This folder is password protected.</div>'+pwField('ulPw','Password','Enter password')
  +'<div class="s" id="msg" style="margin-top:10px"></div><div style="margin-top:16px;display:flex"><button class="btn" id="ulGo" data-enter="1" style="flex:1;margin-right:8px">Unlock</button><button class="btn o" data-a="close">Cancel</button></div>';
- $('#ov').style.display='flex';setTimeout(function(){var i=$('#ulPw');if(i)i.focus()},350);
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');setTimeout(function(){var i=$('#ulPw');if(i)i.focus()},350);
  $('#ulGo').onclick=async function(){var o=ATT[f.id]||(ATT[f.id]={});if(tooMany(o)||!needCrypto())return;
   var h=await pwHash($('#ulPw').value,f.salt);
   if(same(h,f.hash)){o.n=0;S.unlocked.add(f.id);closeSheet();openFolder(f.id)}
@@ -458,14 +522,14 @@ function openUnlock(f){S.sheet=true;
 function askDelFolder(){var f=FLD(S.folderId);if(!f)return;S.sheet=true;var n=S.items.filter(function(x){return x.folder===f.id}).length;
  $('#sh').innerHTML='<div class="grab"></div><h2>Delete folder?</h2><div class="s">&ldquo;'+esc(f.name)+'&rdquo; will be removed. Its '+n+' file'+(n==1?'':'s')+' will move to Deleted.</div>'
  +'<div style="margin-top:20px;display:flex"><button class="btn" id="dfBtn" style="flex:1;margin-right:8px;background:var(--bad)">Delete folder</button><button class="btn o" data-a="close">Cancel</button></div>';
- $('#ov').style.display='flex';
- $('#dfBtn').onclick=function(){trashItems(S.items.filter(function(x){return x.folder===f.id}));
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');
+$('#dfBtn').onclick=function(){trashItems(S.items.filter(function(x){return x.folder===f.id}));
   S.folders=S.folders.filter(function(x){return x.id!==f.id});dbDel('folders',f.id);dbDel('vault',f.id);fdelAdd(f.id);cloudSave();S.unlocked['delete'](f.id);S.tab='home';closeSheet()}}
 
 /* ---- Stored Folder Passwords (gated by Google Authenticator / any TOTP app) ---- */
 var VA={};
 function armVault(){clearTimeout(S.vt);S.vt=setTimeout(function(){if(S.vault){closeSheet();toast('Passwords locked again.')}},120000)}
-async function openVault(){if(!needCrypto())return;S.sheet=true;$('#ov').style.display='flex';var m=await dbGet('meta','totp');m?vaultAsk():vaultSetup()}
+async function openVault(){if(!needCrypto())return;S.sheet=true;$('#ov').style.display='flex';document.body.classList.add('sheet-open');var m=await dbGet('meta','totp');m?vaultAsk():vaultSetup()}
 function vaultSetup(){S.pend=b32enc(crypto.getRandomValues(new Uint8Array(20)));
  var uri='otpauth://totp/iSpace:Folder%20Passwords?secret='+S.pend+'&issuer=iSpace&algorithm=SHA1&digits=6&period=30';
  $('#sh').innerHTML='<div class="grab"></div><h2>Set up Google Authenticator</h2><div class="s">Protects your stored folder passwords. In Google Authenticator tap <b>+</b> &rarr; <b>Enter a setup key</b>, name it iSpace, and enter this key (time based):</div>'
@@ -495,8 +559,8 @@ async function openAutoSync(){S.sheet=true;renderAutoSyncUI()}
 async function renderAutoSyncUI(){
  var list=S.syncFolders.length?S.syncFolders.map(function(f){return '<div class="r"><div class="m"><div class="t">'+esc(f.name)+'</div></div><button class="lnk bd" data-a="rm_sync" data-k="'+esc(f.name)+'">Remove</button></div>'}).join(''):'<div class="empty">No folders added.</div>';
  $('#sh').innerHTML='<div class="grab"></div><h2>Auto-Sync Folders</h2><div class="s">New files in these folders are backed up automatically. Files you delete here are never uploaded again.</div><div style="margin:16px 0"><button class="btn" id="addFolderBtn" style="width:100%">+ Add Folder</button></div><div class="card">'+list+'</div><button class="btn o" data-a="close" style="width:100%;margin-top:16px">Close</button>';
- $('#ov').style.display='flex';
- $('#addFolderBtn').onclick=async function(){
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');
+$('#addFolderBtn').onclick=async function(){
   try{if(!window.showDirectoryPicker)return toast('Your browser does not support this. Use + button instead.');
    var h=await window.showDirectoryPicker({mode:'read'});
    if(S.syncFolders.find(function(f){return f.name===h.name}))return toast('Folder already added');
@@ -532,8 +596,8 @@ function openProfile(){
   '<button class="action-btn" data-a="safe_logout">'+ic('warn')+' <span style="margin-left:12px">Safe Logout</span></button>'+
   '<button class="action-btn danger" data-a="delete_account">'+ic('warn')+' <span style="margin-left:12px">Delete TeleSpace Account</span></button>'+
  '</div><button class="btn o" data-a="close" style="width:100%;margin-top:20px">Close</button>';
- $('#ov').style.display='flex';
- if(window.TGDriver&&window.TGDriver.getMe){
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');
+if(window.TGDriver&&window.TGDriver.getMe){
   window.TGDriver.getMe().then(function(u){
    if(!u)return;
    $('#pName').textContent=(u.firstName||'')+' '+(u.lastName||'');$('#pPhone').textContent=u.phone?'+'+u.phone:'';
@@ -542,7 +606,7 @@ function openProfile(){
    else{$('#pAv').textContent=(u.firstName||'M').charAt(0).toUpperCase()}
   }).catch(function(){$('#pName').textContent='Not connected'})}
 }
-function closeSheet(){S.sheet=false;S.vault=null;S.pend=null;clearTimeout(S.vt);$('#ov').style.display='none';render()}
+function closeSheet(){S.sheet=false;S.vault=null;S.pend=null;clearTimeout(S.vt);$('#ov').style.display='none';document.body.classList.remove('sheet-open');document.getElementById('sh').style.transform='';render()}
 
 /* Modals */
 function showConfirm(actionType, title, desc, expectedText, btnText, btnColor) {
@@ -554,9 +618,9 @@ function showConfirm(actionType, title, desc, expectedText, btnText, btnColor) {
     '<button class="btn" id="cfBtn" style="flex:1;margin-right:8px;background:'+btnColor+'">'+btnText+'</button>'+
     '<button class="btn o" data-a="close">Cancel</button>'+
   '</div>';
-  $('#ov').style.display='flex';
-  
-  $('#cfBtn').onclick = function() {
+  $('#ov').style.display='flex';document.body.classList.add('sheet-open');
+
+$('#cfBtn').onclick = function() {
     let v = $('#cfText').value.trim().toLowerCase();
     if(v === expectedText.toLowerCase()) {
        if(actionType === 'safe') logoutAction('safe');
@@ -574,9 +638,9 @@ function openProxy() {
   '<label>Port</label><input id="px_port" type="number" value="'+(p.port||'')+'" placeholder="443">'+
   '<label>Secret</label><input id="px_sec" value="'+esc(p.secret||'')+'" placeholder="ee...">'+
   '<div style="margin-top:20px;display:flex"><button class="btn" id="px_save" style="flex:1;margin-right:8px">Save</button><button class="btn o" data-a="close">Cancel</button></div>';
-  $('#ov').style.display='flex';
-  
-  $('#px_save').onclick = function() {
+  $('#ov').style.display='flex';document.body.classList.add('sheet-open');
+
+$('#px_save').onclick = function() {
     let ip = $('#px_ip').value.trim(), port = $('#px_port').value.trim(), sec = $('#px_sec').value.trim();
     if(ip && port && sec) {
       localStorage.setItem('tgproxy', JSON.stringify({ip, port, secret: sec}));
@@ -594,7 +658,7 @@ function logoutAction(type){
 }
 
 function openSettings(){return openLogin()}
-function openLogin(){if(ready()){S.sheet=true;$('#sh').innerHTML='<div class="grab"></div><h2>Settings</h2><label>Glass strength</label><input id="gl" type="range" min="0" max="100" value="'+GL+'"><button class="btn o" data-a="close" style="width:100%;margin-top:16px">Close</button>';$('#ov').style.display='flex';return}openAuth('phone')}
+function openLogin(){if(ready()){S.sheet=true;$('#sh').innerHTML='<div class="grab"></div><h2>Settings</h2><label>Glass strength</label><input id="gl" type="range" min="0" max="100" value="'+GL+'"><button class="btn o" data-a="close" style="width:100%;margin-top:16px">Close</button>';$('#ov').style.display='flex';document.body.classList.add('sheet-open');return}openAuth('phone')}
 function openSettingsOld(){
   S.sheet=true; var chVal = S.cfg.chat || '-100';
   $('#sh').innerHTML='<div class="grab"></div><h2>Login to TeleSpace</h2>'+
@@ -614,7 +678,7 @@ function openSettingsOld(){
   '</div>'+
   '<label>Glass strength</label><input id="gl" type="range" min="0" max="100" value="'+GL+'">'+
   '<button class="btn o" data-a="close" style="width:100%; margin-top:16px">Close</button><div class="s" id="msg" style="margin-top:12px"></div>';
-  $('#ov').style.display='flex';
+  $('#ov').style.display='flex';document.body.classList.add('sheet-open');
 }
 function saveCfg(){var t=$('#tk').value.replace(/\s/g,''),c=$('#ch').value.replace(/\s/g,''),m=$('#msg');
  if(!t||!c){m.textContent='Enter both the bot token and the channel.';return}
@@ -626,8 +690,10 @@ function saveCfg(){var t=$('#tk').value.replace(/\s/g,''),c=$('#ch').value.repla
 
 var AU={phone:['Your phone number','Use the full number with country code, like +92.','tel','+92 3xx xxxxxxx','Continue'],code:['Enter the code','Telegram sent it to your other device or by SMS.','tel','Code','Verify'],password:['Two-step password','Enter the cloud password of your account.','password','Password','Sign in']};
 function openAuth(step,msg){S.sheet=true;var T=AU[step];
- $('#sh').innerHTML='<div class="grab"></div><h2>'+T[0]+'</h2><div class="s">'+T[1]+'</div><input id="au" style="margin-top:16px" type="'+T[2]+'" inputmode="'+(step=='password'?'text':'tel')+'" autocomplete="'+(step=='code'?'one-time-code':'off')+'" placeholder="'+T[3]+'"><div class="s" id="msg" style="margin-top:12px">'+(msg||'')+'</div><div style="margin-top:16px;display:flex"><button class="btn" data-enter="1" data-a="go" data-k="'+step+'" style="flex:1;margin-right:8px">'+T[4]+'</button><button class="btn o" data-a="close">Close</button></div>';
- $('#ov').style.display='flex';setTimeout(function(){var i=$('#au');if(i)i.focus()},350)}
+ var isPw = step == 'password';
+ var rName = 'auth_' + Math.random().toString(36).slice(2);
+ $('#sh').innerHTML='<div class="grab"></div><h2>'+T[0]+'</h2><div class="s">'+T[1]+'</div><input id="au" style="margin-top:16px" type="'+(isPw?'text':'tel')+'" inputmode="'+(isPw?'text':'tel')+'" autocomplete="off" data-lpignore="true" data-1p-ignore="true" name="'+rName+'" '+(isPw?'class="pw-text"':'')+' placeholder="'+T[3]+'"><div class="s" id="msg" style="margin-top:12px">'+(msg||'')+'</div><div style="margin-top:16px;display:flex"><button class="btn" data-enter="1" data-a="go" data-k="'+step+'" style="flex:1;margin-right:8px">'+T[4]+'</button><button class="btn o" data-a="close">Close</button></div>';
+ $('#ov').style.display='flex';document.body.classList.add('sheet-open');setTimeout(function(){var i=$('#au');if(i)i.focus()},350)}
 function authGo(step){var m=$('#msg'),v=$('#au').value.replace(/^\s+|\s+$/g,'');if(!v){m.textContent='Fill in this field first.';return}
  if(!window.TGDriver){m.innerHTML='<span class="bd">Bridge not loaded.</span>';return}
  m.textContent='Please wait...';
@@ -659,7 +725,8 @@ function hist(){
   a.forEach(function(x){
    if(hf[x.fp]){var it=byFp(x.fp);if(it&&!it.msgId){it.msgId=x.msgId;save(it)}if(it&&x.folder&&!it.folder&&FLD(x.folder)){it.folder=x.folder;save(it)}return}
    if(hi[x.msgId]||S.tomb.has(x.fp))return;
-   var n={fp:x.fp,name:x.name,size:x.size||0,mtime:x.mtime||Date.now(),state:'done',p:1,msgId:x.msgId};
+if (x.folder && (!FLD(x.folder) || (FLD(x.folder) && FLD(x.folder).locked && !S.unlocked.has(x.folder)))) return; // skip protected folder items
+var n={fp:x.fp,name:x.name,size:x.size||0,mtime:x.mtime||Date.now(),state:'done',p:1,msgId:x.msgId};
    if(x.folder&&FLD(x.folder))n.folder=x.folder;
    S.items.push(n);save(n);changed=true});
   if(S.rtrash){S.items.forEach(function(it){if(it.state=='done'&&it.msgId&&S.rtrash[it.msgId]){it.state='trash';it.trashAt=S.rtrash[it.msgId];save(it)}})}loadThumbs();render()},function(){})
@@ -676,7 +743,7 @@ function wipeLocal(){S.items=[];S.folders=[];S.tomb=new Set();S.unlocked=new Set
 function forceLogout(why){if(S.out)return;S.out=1;S.items.forEach(function(it){if(it.state=='up')rt(it.fp).stop='pause'});
  var D=window.TGDriver;(D&&D.logout?D.logout():Promise.resolve()).catch(function(){}).then(function(){endSession();S.sheet=true;
   $('#sh').innerHTML='<div class="grab"></div><h2>Logged out</h2><div class="s">'+esc(why||'You have been logged out from Telegram (this device was terminated). Please login again.')+'</div><div style="margin-top:20px"><button class="btn" data-a="auth" data-k="phone" style="width:100%">Login again</button></div>';
-  $('#ov').style.display='flex';render()})}
+  $('#ov').style.display='flex';document.body.classList.add('sheet-open');render()})}
 /* ---- cloud copy of folders / passwords / authenticator key (JSON file in the user's own Telegram channel) ---- */
 function b64(u){var s='';for(var i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)}
 function unb64(s){var b=atob(s),u=new Uint8Array(b.length);for(var i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
@@ -709,6 +776,47 @@ function flushMeta(){clearTimeout(cs);return doCloud()}
 var thQ=[],thBusy=0,thTried={};
 function loadThumbs(){S.items.forEach(function(it){if(it.state!='done'||it.thumb||thTried[it.fp]||!it.msgId)return;var k=kind(it);if(k!='image'&&k!='video')return;thTried[it.fp]=1;thQ.push(it)});thPump()}
 function thPump(){var D=window.TGDriver;if(!D||!D.getThumb)return;while(thBusy<2&&thQ.length){(function(it){thBusy++;D.getThumb(it.msgId).then(function(u){if(u){it.thumb=u;save(it);clearTimeout(S.tr);S.tr=setTimeout(function(){if(!S.sheet)render()},500)}}).catch(function(){}).then(function(){thBusy--;thPump()})})(thQ.shift())}}
+/* ---- iOS Swipe to Close (Sheet) ---- */
+var shY = 0, shStart = 0, shDrag = false;
+document.addEventListener('touchstart', function(e) {
+    var grab = e.target.closest('.grab');
+    if (!grab) return;
+    shDrag = true;
+    shStart = e.touches[0].clientY;
+    var sh = document.getElementById('sh');
+    sh.style.transition = 'none';
+    try { navigator.vibrate(10); } catch(x){}
+}, {passive: true});
+document.addEventListener('touchmove', function(e) {
+    if (!shDrag) return;
+    var y = e.touches[0].clientY - shStart;
+    if (y < 0) y = 0;
+    var sh = document.getElementById('sh');
+    sh.style.transform = 'translateY(' + y + 'px)';
+    e.preventDefault();
+}, {passive: false});
+document.addEventListener('touchend', function(e) {
+    if (!shDrag) return;
+    shDrag = false;
+    var sh = document.getElementById('sh');
+    sh.style.transition = 'transform 0.3s ease-out';
+    var y = parseFloat(sh.style.transform.replace('translateY(', '').replace('px)', '')) || 0;
+    if (y > 100) {
+        sh.style.transform = 'translateY(100%)';
+        setTimeout(closeSheet, 300);
+    } else {
+        sh.style.transform = 'translateY(0)';
+    }
+});
+
+/* Add blur class when sheet opens */
+var _origOpenSheet = window.openSheet;
+document.addEventListener('click', function(e) {
+    if (e.target.closest('[data-a="profile"]') || e.target.closest('[data-a="settings"]') || e.target.closest('[data-a="new_folder"]') || e.target.closest('[data-a="upload_here"]') || e.target.closest('[data-a="vault"]') || e.target.closest('[data-a="autosync"]')) {
+        setTimeout(function(){ document.body.classList.add('sheet-open'); }, 10);
+    }
+});
+
 /* ---- app feel: long-press select, no context menu / pinch zoom ---- */
 (function(){var t=null,sx=0,sy=0;
  document.addEventListener('touchstart',function(e){var el=e.target.closest&&e.target.closest('[data-fp]');if(!el||e.touches.length>1)return;var at=el.getAttribute('data-a');if(at!='view'&&at!='select_file')return;var fp=el.getAttribute('data-fp');sx=e.touches[0].clientX;sy=e.touches[0].clientY;clearTimeout(t);
@@ -722,7 +830,28 @@ function thPump(){var D=window.TGDriver;if(!D||!D.getThumb)return;while(thBusy<2
 
 document.addEventListener('click',function(e){
  var el=e.target;while(el&&el!==document&&!(el.getAttribute&&(el.getAttribute('data-a')||el.id=='sv'||el.id=='fab'||el.id=='closeV')))el=el.parentNode;if(!el||el===document)return;
- if(el.id=='sv')return saveCfg();if(el.id=='fab')return openPlus();if(el.id=='closeV'){$('#ovV').style.display='none';$('#vContent').innerHTML='';return}
+ if(el.id=='sv')return saveCfg();
+if(el.id=='fab'){
+  if(S.tab=='transfers'||S.tab=='deleted') return;
+  var ctx = curCtx();
+  if(S.tab=='photos'||S.tab=='videos'||S.tab=='audio'){
+      S.pickTarget=ctx; $('#pickA').accept=FT[ctx.type]?FT[ctx.type].acc:''; $('#pickA').click(); return;
+  }
+  if(S.tab=='files'){ S.pickTarget={type:'docs'}; $('#pickA').accept=''; $('#pickA').click(); return; }
+  if(S.tab=='folder'){
+      if(S.folderId=='filemanager') return openPlus();
+      if(S.folderId=='notepad') return openNoteEditor();
+      var f=FLD(S.folderId);
+      S.pickTarget=ctx; $('#pickA').accept=FT[f.type]?FT[f.type].acc:''; $('#pickA').click(); return;
+  }
+  return openPlus();
+}
+if(el.id=='closeV'){
+    $('#ovV').style.display='none';
+    var v = document.getElementById('vVideo'); if(v) { v.pause(); v.src = ''; }
+    var a = document.querySelector('#vContent audio'); if(a) { a.pause(); a.src = ''; }
+    $('#vContent').innerHTML=''; return;
+}
  var a=el.getAttribute('data-a'),k=el.getAttribute('data-k'),fp=el.getAttribute('data-fp'),it=fp?byFp(fp):null;
  if(S.vault)armVault();
  if(!ready()&&['auth','go','close','eye'].indexOf(a)<0)return openLogin();
@@ -766,8 +895,14 @@ document.addEventListener('click',function(e){
  else if(a=='tg_lock'){S.nf.lock=!S.nf.lock;$('#swk').classList.toggle('on',S.nf.lock);$('#pwBox').style.display=S.nf.lock?'block':'none';$('#swT').innerHTML='Optional &middot; '+(S.nf.lock?'Enabled':'Disabled')}
  else if(a=='eye'){var inp=document.getElementById(k);if(inp){var show=inp.type=='password';inp.type=show?'text':'password';el.innerHTML=show?EYEOFF:EYE}}
  else if(a=='open_folder')openFolder(k);
+else if(a=='open_util') { S.tab='folder'; S.folderId=k; S.anim=1; render(); window.scrollTo(0,0); }
  else if(a=='del_folder')askDelFolder();
- else if(a=='upload_here'){if(S.sheet){S.sheet=false;$('#ov').style.display='none'}var ctx=curCtx();S.pickTarget=ctx;$('#pickA').accept=ctx&&FT[ctx.type]?FT[ctx.type].acc:'';$('#pickA').click()}
+ else if(a=='upload_here'){
+    if(S.sheet){S.sheet=false;$('#ov').style.display='none'}
+    var ctx=curCtx();
+    if(S.tab=='folder' && S.folderId=='notepad') return openNoteEditor(); // Notepad ke liye fix
+    S.pickTarget=ctx;$('#pickA').accept=ctx&&FT[ctx.type]?FT[ctx.type].acc:'';$('#pickA').click()
+}
  /* vault */
  else if(a=='vault'){openVault()}
  else if(a=='v_eye'){var t=document.getElementById('vp_'+k);if(t&&S.vault){var sh=t.getAttribute('data-s')=='1';t.setAttribute('data-s',sh?'0':'1');t.textContent=sh?'\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022':S.vault[k];el.innerHTML=sh?EYE:EYEOFF}}
@@ -782,7 +917,7 @@ document.addEventListener('click',function(e){
   $('#sh').innerHTML='<div class="grab"></div><h2>Delete TeleSpace Account</h2><div class="s">Choose an option:</div><div style="margin-top:20px;display:flex;flex-direction:column;gap:10px"><button class="btn" data-a="factory_delete" style="background:var(--bad)">Factory Delete Backup Data</button><button class="btn o" data-a="do_logout">Keep Safe Data</button><button class="btn o" data-a="close">Cancel</button></div>'}
  else if(a=='factory_delete')showConfirm('factory','Factory Delete','This will permanently delete your Telegram Channel and all local data.','delete','Delete Account','var(--bad)');
  else if(a=='do_logout')showConfirm('safe','Keep Safe Data','This will log you out but keep your data in Telegram.','logout','Logout','var(--ac)');
- else if(a=='report'){var lg=(window.__errs||[]).join('\n')||'No errors recorded';if(navigator.clipboard)navigator.clipboard.writeText(lg).then(function(){toast('Error log copied. Send it to the developer.')},function(){toast('Copy not allowed here')})}
+ else if(a=='report'){var lg=(window.__errs||[]).join('\n')||'No errors recorded';var txt = 'Hello iSpace Team!\n\n[ Write Problem ]\n\nError Log:\n'+lg;window.open('https://wa.me/923041891897?text='+encodeURIComponent(txt), '_blank')}
  else if(a=='telegram_channel'){
   if(!window.TGDriver||!window.TGDriver.getChannelLink)return toast('Not connected');
   toast('Opening channel...');
@@ -803,6 +938,22 @@ document.addEventListener('visibilitychange',function(){
 /* internet back: failed-by-network uploads restart, big uploads continue by themselves from the last saved part */
 window.addEventListener('online',function(){S.items.forEach(function(it){if(it.state=='fail'&&it.net&&!it.big){it.state='queued';save(it)}});run();if(S.tab=='transfers')render()});
 window.addEventListener('offline',function(){if(S.tab=='transfers')render()});
+
+function openNoteEditor() {
+    S.sheet = true;
+    $('#sh').innerHTML = '<div class="grab"></div><h2>New Note</h2><input id="noteTitle" placeholder="Title.txt" style="margin-bottom:10px"><textarea id="noteContent" placeholder="Write here..." style="width:100%;height:200px;background:var(--sf2);border:none;border-radius:14px;padding:16px;color:#fff;font-family:monospace;outline:none;resize:none"></textarea><div style="margin-top:16px;display:flex"><button class="btn" id="saveNote" style="flex:1;margin-right:8px">Save to Notepad</button><button class="btn o" data-a="close">Cancel</button></div>';
+    $('#ov').style.display='flex'; document.body.classList.add('sheet-open');
+    $('#saveNote').onclick = function() {
+        var title = $('#noteTitle').value.trim() || 'Note_' + Date.now();
+        if(!title.endsWith('.txt')) title += '.txt';
+        var text = $('#noteContent').value;
+        if(!text) return toast('Cannot save empty note.');
+        var file = new File([text], title, {type: 'text/plain'});
+        S.pickTarget = {id: 'notepad', type: 'notes'};
+        add([file], S.pickTarget);
+        closeSheet();
+    };
+}
 
 openDb(function(){
  Promise.all([dbAll('folders'),dbAll('tomb'),dbAll('prog'),dbAll('sync'),dbGet('meta','fdel')]).then(function(r){

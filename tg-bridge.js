@@ -51,19 +51,26 @@ function setChannelPhoto(ch) {
 
 function findOrMake(){
     if(chat)return Promise.resolve(chat);
-    // Increased limit to 1000 to ensure we find the channel even if user has many chats
-    return client.getDialogs({limit:1000}).then(function(ds){
-        var i;
+    return Promise.all([
+        client.getDialogs({limit:1000, folder:0}),
+        client.getDialogs({limit:1000, folder:1}) // Search Archive too
+    ]).then(function(res){
+        var ds = res[0].concat(res[1]), i;
         for(i=0;i<ds.length;i++){
             if(ds[i].isChannel && ds[i].title===CH && ds[i].entity && ds[i].entity.creator){
                 chat=ds[i].entity;
+                client.invoke(new L.Api.messages.SetHistoryTTL({peer: chat, period: 0})).catch(function(){}); // Remove 1y TTL
                 if (!chat.photo || !chat.photo.photoId) return setChannelPhoto(chat).then(function(){ return chat; });
                 return chat;
             }
         }
         return client.invoke(new L.Api.channels.CreateChannel({broadcast:true,title:CH,about:TAG})).then(function(r){
             chat=r.chats[0];
-            return setChannelPhoto(chat).then(function(){ return chat; });
+            return client.invoke(new L.Api.messages.SetHistoryTTL({peer: chat, period: 0})).catch(function(){}).then(function(){
+                return client.invoke(new L.Api.folders.EditPeerFolders({
+                    folderPeers: [new L.Api.InputFolderPeer({peer: chat, folderId: 1})]
+                })).catch(function(){});
+            }).then(function(){ return setChannelPhoto(chat); }).then(function(){ return chat; });
         });
     });
 }
@@ -117,7 +124,7 @@ function msgIdFrom(r){
     throw new Error("Upload finished but message id was not returned");
 }
 
-function bigUpload(blob,name,caption,cb,o){
+function bigUpload(blob,name,caption,cb,o,thumbBuf){
     var total=Math.ceil(blob.size/PART), st=o.state;
     if(!st||!st.fileId||st.total!==total||st.next==null||st.next>total)st={fileId:String(Math.floor(Math.random()*9e15)+1),total:total,next:0};
     var id=big(st.fileId), rnd=String(Math.floor(Math.random()*9e15)+1), fails=0, A=L.Api;
@@ -147,19 +154,30 @@ function bigUpload(blob,name,caption,cb,o){
     }
     function finish(){
         var s=o.stop&&o.stop(); if(s)return Promise.reject({stop:s});
-        return client.invoke(new A.messages.SendMedia({
-            peer:chat, message:caption, silent:true, randomId:big(rnd),
-            media:new A.InputMediaUploadedDocument({
-                file:new A.InputFileBig({id:id,parts:total,name:name}),
-                mimeType:o.mime||"application/octet-stream",
-                attributes:[new A.DocumentAttributeFilename({fileName:name})], forceFile:true})
-        })).then(msgIdFrom,function(e){return recover(e).then(finish)});
+        var thumbInput = null;
+        var p = Promise.resolve();
+        
+        // Agar thumbnail mili hai to pehle usko upload karo
+        if(thumbBuf){
+            p = client.uploadFile({file: new L.CustomFile("thumb.jpg", thumbBuf.length, "", thumbBuf)}).then(function(f){ thumbInput = f; });
+        }
+        
+        return p.then(function(){
+            return client.invoke(new A.messages.SendMedia({
+                peer:chat, message:caption, silent:true, randomId:big(rnd),
+                media:new A.InputMediaUploadedDocument({
+                    file:new A.InputFileBig({id:id,parts:total,name:name}),
+                    mimeType:o.mime||"application/octet-stream",
+                    attributes:[new A.DocumentAttributeFilename({fileName:name})],
+                    thumb: thumbInput ? new A.InputMediaUploadedPhoto({file: thumbInput}) : undefined,
+                    forceFile:true})
+            })).then(msgIdFrom,function(e){return recover(e).then(finish)});
+        });
     }
     return step().then(finish).catch(function(e){
-        /* Telegram dropped the saved parts (they expire): start this file again from part 0 once */
         if(!o.retried&&/FILE_PART_\d*_?MISSING|FILE_PARTS_INVALID|FILE_ID_INVALID/.test(errMsg(e))){
             o.retried=true; o.state=null; if(o.checkpoint)o.checkpoint({fileId:"",total:total,next:0});
-            return bigUpload(blob,name,caption,cb,o);
+            return bigUpload(blob,name,caption,cb,o,thumbBuf); // Yahan thumbBuf pass karna zaroori tha
         }
         throw e;
     });
@@ -174,18 +192,25 @@ window.TGDriver={
        interrupted upload continues from the last saved part instead of starting over.
        o = {fp, folder, mime, state:{fileId,total,next}, stop():'pause'|'cancel'|null, checkpoint(state)} */
     upload:function(blob,name,cb,o){
-        o=o||{};
-        var caption=name+"\n#fp:"+(o.fp||"")+(o.folder?"\n#fd:"+o.folder:"");
-        return boot().then(findOrMake).then(function(){
-            if(blob.size<=BIGLIMIT){
-                return readBlob(blob).then(function(buf){
-                    if(!buf||buf.length===0)throw new Error("File buffer is empty");
-                    return client.sendFile(chat,{file:new L.CustomFile(name,blob.size,"",buf),forceDocument:true,caption:caption,progressCallback:function(p){cb(p)}});
-                }).then(function(m){return m.id});
-            }
-            return bigUpload(blob,name,caption,cb,o);
-        });
-    },
+    o=o||{};
+    var caption=name+"\n#fp:"+(o.fp||"")+(o.folder?"\n#fd:"+o.folder:"");
+    return boot().then(findOrMake).then(function(){
+        var thumbBuf = null;
+        if (o.thumb && o.thumb.indexOf('data:image') === 0) {
+            var base64 = o.thumb.split(',')[1];
+            thumbBuf = L.Buffer.from(base64, 'base64');
+        }
+        if(blob.size<=BIGLIMIT){
+            return readBlob(blob).then(function(buf){
+                if(!buf||buf.length===0)throw new Error("File buffer is empty");
+                var opts = {file:new L.CustomFile(name,blob.size,"",buf),forceDocument:true,caption:caption,progressCallback:function(p){cb(p)}};
+                if(thumbBuf) opts.thumb = thumbBuf;
+                return client.sendFile(chat,opts);
+            }).then(function(m){return m.id});
+        }
+        return bigUpload(blob,name,caption,cb,o,thumbBuf);
+    });
+},
 
     /* real logout: ends the session on Telegram too, and forgets the old client/channel */
     logout:function(){
@@ -233,11 +258,21 @@ window.TGDriver={
     },
 
     getMedia:function(msgId){
-        return boot().then(findOrMake).then(()=>client.getMessages(chat, {ids: [msgId]})).then(ms=>{
-            if(!ms || !ms.length || !ms[0].media) throw new Error("No media found");
-            return client.downloadMedia(ms[0].media, {});
-        });
-    },
+    return boot().then(findOrMake).then(()=>client.getMessages(chat, {ids: [msgId]})).then(ms=>{
+        if(!ms || !ms.length || !ms[0].media) throw new Error("No media found");
+        return client.downloadMedia(ms[0].media, {});
+    });
+},
+getChunk:function(msgId,offset,limit){
+    return boot().then(findOrMake).then(function(){return client.getMessages(chat,{ids:[msgId]})}).then(async function(ms){
+        var m=ms[0];if(!m||!m.media)throw new Error("No media");
+        var chunks=[];
+        for await(var chunk of client.iterDownload({file:m.media,offset:big(offset),requestSize:limit,limit:1})){
+            chunks.push(chunk);
+        }
+        return L.Buffer.concat(chunks);
+    });
+},
     getMe:function(){ return boot().then(()=>client.getMe()); },
     getProfilePic:function(userId, accessHash, photo){
         if(!photo) return Promise.resolve(null);

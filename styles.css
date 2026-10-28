@@ -146,6 +146,18 @@ button:active{transform:scale(.95)}
 
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 
+/* New Fixes */
+.pw-text{-webkit-text-security:disc}
+.home-indicator{display:none!important}
+body.sheet-open{overflow:hidden!important;position:fixed;width:100%}
+body.sheet-open #app,body.sheet-open .bottom-nav,body.sheet-open .fab,body.sheet-open #live{filter:blur(5px);pointer-events:none}
+#live{right:86px!important} /* Fixes FAB overlap */
+body.select-mode .fab{display:none!important} /* Hide FAB in select mode */
+body.nonav .bottom-nav{display:none!important} /* Hide nav in protected folder */
+body.nonav .fab{display:none!important}
+body.nonav #app{padding-bottom:40px!important}
+#vContent audio{width:80vw;margin-top:20px}
+
 /* ---- v2: folders, passwords, transfers, greeting ---- */
 .icon-trash{background:linear-gradient(135deg,#ff6a6a,#c62828)}
 .wish{font-size:13px;color:var(--tx2)}

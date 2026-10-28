@@ -374,10 +374,10 @@ else if(t=='folder'){
  $('#nav').innerHTML=[['home','Home','house','g-home'],['files','Drive','folder','g-drive'],['all','All','layer-group','g-all']].map(function(t){return '<div data-a="tab" data-k="'+t[0]+'" class="nav-item'+(S.tab==t[0]?' active':'')+'"><span class="nav-ic '+t[3]+'"><i class="fa-solid fa-'+t[2]+'"></i></span><span>'+t[1]+'</span></div>'}).join('')
  +'<div data-a="profile" class="nav-item"><span class="nav-ic g-more"><i class="fa-solid fa-ellipsis"></i></span><span>More</span></div>';
 var isFM = S.tab === 'folder' && S.folderId === 'filemanager'; // <-- File Manager check
-var isProtectedFolder = S.tab == 'folder' && FLD(S.folderId) && FLD(S.folderId).locked && !isFM;
+var isProtectedFolder = !!(S.tab == 'folder' && !isFM && FLD(S.folderId) && FLD(S.folderId).locked);
 
-document.body.classList.toggle('nonav', isProtectedFolder);
-document.body.classList.toggle('select-mode', S.selectMode);
+document.body.classList.toggle('nonav', !!isProtectedFolder);
+document.body.classList.toggle('select-mode', !!S.selectMode);
 
 var fabEl = document.getElementById('fab');
 if(fabEl) {

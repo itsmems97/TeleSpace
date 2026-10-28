@@ -224,3 +224,13 @@ img,video,a{-webkit-user-drag:none;-webkit-touch-callout:none}
 .actl button b{position:absolute;font-size:9px;font-weight:700;top:50%;left:50%;transform:translate(-50%,-45%)}
 .actl .big{width:68px;height:68px;border-radius:50%;background:#fff;color:#000;font-size:26px}
 #vDownload{cursor:pointer}
+
+/* ---- v3.1: nav fit ---- */
+.bottom-nav{height:76px;padding:0 8px;align-items:center}
+.nav-item{height:auto;flex:1;justify-content:center;gap:3px;padding:0}
+.nav-ic{width:34px;height:34px;border-radius:11px;font-size:16px;flex:none}
+.nav-item span:last-child{line-height:13px;font-size:11px}
+.nav-item.active .nav-ic{transform:none;box-shadow:0 4px 12px rgba(10,132,255,.4)}
+.fab{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+#live{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
+#sel-bar{bottom:calc(104px + env(safe-area-inset-bottom,0px))}
